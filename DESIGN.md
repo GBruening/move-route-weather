@@ -247,6 +247,16 @@ Quiet and precise: small type, hairlines, tabular numbers, and color reserved fo
 - **Legend:** white at 95% opacity, 10px radius, overlay shadow, collapsible header.
 - **Info window:** 380px max. A heading with a route swatch, a three-up KPI tile row (#f6f7f5, 7px radius), and a compact right-aligned per-source table.
 
+### Schedule Editor
+- Opened from a quiet "Edit schedule" button at the top of the itinerary. "Done" is the one filled-Ink button; "Reset to plan" is quiet. A small Ink 3 status line says "Saving…" or "Changes are saved as you make them".
+- The controls are plain native inputs and selects: 1px #cfd5cf border, 6px radius, 12.5px text, and a teal focus ring.
+- The Night picker sits in a soft #f7f8f6 panel between days. "Edit stops" is a teal text link that opens per-stop rows: kind select, minutes, and a small square × that turns red on hover.
+- When a computed time drifts more than 15 minutes from the written plan, it shows "plan 3:30 PM" in amber-brown (#92400e) under the time.
+- Cruise speed is a native range input with the teal accent and a bold tabular readout. Driving totals sit in Ink 2, bold and tabular, on the route cards and day headings.
+
+### Wind Legend
+- The mph ranges (0–10, 10–20, 20–30, 30–40, 40+) sit above compact arrows: length 10 + mph × 0.4, colored by the wind scale. The note under them says arrows start at the point and point downwind, and that dashed lines are gusts.
+
 ### Overview Strip
 - A 22px strip between the chart header and the chart, aligned to the chart's 46px margins. It has an "All" button (filled Ink when the whole route shows) and one quiet button per day (Faint Hairline fill, 5px radius, bold day label plus Ink 3 title, truncated with an ellipsis).
 - The selection is a 2px Dispatch Teal window (6px radius) with small teal grips on both edges, and white 68% shades over everything outside it. Click a day, or drag to create, move or resize the window.

@@ -13,6 +13,8 @@ const state = {
   layers: { wind: true, rain: true, snow: true, temp: true },
   // open panes; closed = collapsed sidebar sections; sideW / pfH = dragged sizes in px (null = default)
   ui: { side: true, profile: true, closed: [], sideW: null, pfH: null },
+  speed: 60,             // cruise mph (saved on the server; times are worked out from it)
+  edit: { on: false, model: null, key: null, busy: false, adv: new Set(), pick: null },
   plans: new Map(),      // "r1|0" -> plan from /api/plan
   loading: new Set(),
   map: null, gm: null, overlay: null, info: null,
@@ -58,6 +60,8 @@ function fmtTime(ts, tz, withDay = false) {
   return `${fmtCache.get(k).format(new Date(ts * 1000))} ${TZ_ABBR[tz] || ''}`.trim();
 }
 const n0 = (v) => (v == null ? '–' : Math.round(v).toString());
+// driving hours -> "22 h 27 m"
+const fmtDur = (h) => { const m = Math.round(h * 60); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} m` : `${m} m`; };
 const inch = (v, d = 2) => (v == null ? '–' : `${v.toFixed(d)}″`);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = (sel) => document.querySelector(sel);
@@ -232,6 +236,7 @@ async function initMap() {
     styles: MAP_STYLES,
   });
   state.info = new InfoWindow({ maxWidth: 400 });
+  state.map.addListener('click', (e) => onMapPick(e.latLng));
   const WeatherOverlay = makeOverlayClass(OverlayView);
   state.overlay = new WeatherOverlay();
   state.overlay.setMap(state.map);
@@ -527,18 +532,18 @@ function focusSample(plan, i, open = true) {
 function renderLegend() {
   const el = $('#legend');
   const arrow = (mph, col) => {
-    const len = arrowLen(mph) * 0.6;
+    const len = 10 + mph * 0.4;  // compact, but still longer for stronger wind
     return `<svg width="${len + 8}" height="14" viewBox="${-len / 2 - 4} -7 ${len + 8} 14"><g transform="rotate(90)">`
       + `<line x1="0" y1="${len / 2}" x2="0" y2="${-len / 2 + 4}" stroke="${col}" stroke-width="2.6" stroke-linecap="round"/>`
       + `<path d="M0 ${-len / 2 - 2} L-4.5 ${-len / 2 + 5} L4.5 ${-len / 2 + 5} Z" fill="${col}"/></g></svg>`;
   };
-  const winds = [[5, 'under 10'], [15, '10–20'], [25, '20–30'], [35, '30–40'], [45, '40+']]
-    .map(([mph, lab]) => `<span title="${lab} mph">${arrow(mph, windColor(mph))}</span>`).join('');
+  const winds = [[5, '0–10'], [15, '10–20'], [25, '20–30'], [35, '30–40'], [45, '40+']]
+    .map(([mph, lab]) => `<span class="lg-wc"><span>${lab}</span>${arrow(mph, windColor(mph))}</span>`).join('');
   const chip = (f) => { const st = tempStyle(f); return `<svg width="28" height="15"><rect width="28" height="15" rx="7.5" fill="${st.bg}"/><text x="14" y="11" text-anchor="middle" font-size="10" font-weight="650" fill="${st.fg}">${f}°</text></svg>`; };
   el.innerHTML = `<div class="lg-head" id="lg-toggle"><span>Legend</span><button type="button">hide</button></div>`
     + '<div class="lg-body">'
-    + `<div class="lg-row"><span class="lg-k">Wind</span>${winds}</div>`
-    + '<div class="lg-row"><span class="lg-k"></span><span>under 10 · 20 · 30 · 40 · 40+ mph; dashes = gusts</span></div>'
+    + `<div class="lg-row lg-wind-row"><span class="lg-k">Wind<small>mph</small></span><span class="lg-wind">${winds}</span></div>`
+    + '<div class="lg-row"><span class="lg-k"></span><span>Arrows start at the point and point downwind. Dashed line = gusts.</span></div>'
     + `<div class="lg-row"><span class="lg-k">Rain</span><svg width="10" height="18"><rect x="1" y="2" width="7" height="16" rx="1.5" fill="${RAIN}"/></svg>`
     + `<span class="lg-k" style="min-width:auto;margin-left:10px">Snow</span><svg width="10" height="18"><rect x="1" y="2" width="7" height="16" rx="1.5" fill="${SNOW}"/></svg>`
     + '<span>faint bar = wettest source</span></div>'
@@ -701,7 +706,8 @@ function renderRoutes() {
     card.innerHTML = `<div class="route-bar"></div><div class="route-body">`
       + `<div class="route-name"><b>${esc(r.name)}</b><span>${esc(r.short)}</span>${badge ? `<span class="badge${badge === r.badge_portland ? '' : ' plain'}">${esc(badge)}</span>` : ''}`
       + `${extra}</div>`
-      + `<div class="route-meta">${plan ? `${plan.total_miles.toLocaleString()} mi · ` : ''}${esc(viaP && r.description_portland ? r.description_portland : r.description)}</div>`
+      + `<div class="route-meta">${plan ? `<span class="drive">${plan.total_miles.toLocaleString()} mi · ${fmtDur(plan.total_miles / state.speed)} driving</span>${plan.edited ? ' <span class="badge alt">edited</span>' : ''}<br>` : ''}`
+      + `${esc(viaP && r.description_portland ? r.description_portland : r.description)}</div>`
       + `<div class="route-stats">${stats}</div></div>`
       + `<button class="eye" type="button" aria-pressed="${shown}" title="${shown ? 'Hide' : 'Show'} on map">${shown ? EYE : EYE_OFF}</button>`;
     card.addEventListener('click', (e) => {
@@ -811,32 +817,287 @@ function renderItinerary() {
   const host = $('#itin');
   host.innerHTML = '';
   if (!plan) return;
+  const ed = state.edit;
+  const editing = ed.on && ed.key === vkey(state.focus) && ed.model;
+  if (ed.on && !editing && !ed.busy) { ed.on = false; ed.model = null; }  // the focused route changed
+
+  const tools = document.createElement('div');
+  tools.className = 'itin-tools';
+  tools.innerHTML = editing
+    ? `<button type="button" class="ed-btn is-primary" data-act="done">Done</button>${plan.edited ? '<button type="button" class="ed-btn" data-act="reset">Reset to plan</button>' : ''}`
+      + `<span class="ed-status">${ed.busy ? 'Saving…' : 'Changes are saved as you make them'}</span>`
+    : `<button type="button" class="ed-btn" data-act="edit">Edit schedule</button>${plan.edited ? '<span class="badge alt">edited</span><button type="button" class="ed-btn" data-act="reset">Reset to plan</button>' : ''}`;
+  host.appendChild(tools);
+
   plan.days.forEach((d, di) => {
+    const md = editing ? ed.model.days[di] : null;
     const box = document.createElement('div');
     box.className = 'itin-day';
-    box.innerHTML = `<h3><b>${esc(d.label)} · ${esc(d.title)}${d.estimated ? '<span class="est">times est.</span>' : ''}</b><span>${d.miles} mi</span></h3>`
+    box.innerHTML = `<h3><b>${esc(d.label)} · ${esc(d.title)}${d.estimated ? '<span class="est">times est.</span>' : ''}</b>`
+      + `<span>${d.miles} mi · ${fmtDur(d.miles / state.speed)}</span></h3>`
       + (d.note ? `<div class="day-note">${esc(d.note)}</div>` : '')
       + (d.approx ? '<div class="day-note" style="color:#9a3412">Route line approximate (routing service unreachable).</div>' : '');
-    plan.stops.filter((st) => st.day === di).forEach((st) => {
-      const t = st.kind === 'start' ? st.depart : (st.arrive ?? st.depart);
-      const si = plan.samples.findIndex((s) => s.day === di && s.stop != null && stopOf(plan, s) === st);
-      const w = si >= 0 && plan.weather ? plan.weather[si] : null;
-      let wx = '';
-      if (w) {
-        wx = `<div class="stop-wx">${w.t != null ? `<span>${n0(w.t)}°F</span>` : ''}`
-          + `${w.w != null ? `<span>${compass(w.d)} ${n0(w.w)}${w.g != null ? `–${n0(w.ghi ?? w.g)}` : ''} mph</span>` : ''}`
-          + `${(w.s ?? 0) >= 0.1 ? `<span class="s">snow ${inch(w.s, 1)}</span>` : ''}`
-          + `${(w.r ?? 0) >= 0.01 ? `<span class="r">rain ${inch(w.r)}</span>` : ''}</div>`;
-      }
-      const row = document.createElement('div');
-      row.className = 'stop';
-      row.innerHTML = `<div class="stop-time">${esc(fmtTime(t, st.tz))}<small>${KIND_LABEL[st.kind] || st.kind}</small></div>`
-        + `<div><div class="stop-name">${esc(st.name)}</div>${st.note ? `<div class="stop-note">${esc(st.note)}</div>` : ''}${wx}</div>`;
-      if (si >= 0) row.addEventListener('click', () => focusSample(plan, si));
-      box.appendChild(row);
-    });
+    if (md) {
+      const start = plan.stops.find((st) => st.day === di);
+      box.insertAdjacentHTML('beforeend', `<div class="ed-row"><label for="dep-${di}">Leave ${esc(start ? start.short : '')}</label>`
+        + `<input type="time" id="dep-${di}" value="${esc(md.depart)}" data-act="depart" data-day="${di}" step="300">`
+        + `<button type="button" class="ed-link" data-act="adv" data-day="${di}">${ed.adv.has(di) ? 'Hide stop editing' : 'Edit stops'}</button></div>`);
+    }
+    if (md && ed.adv.has(di)) box.appendChild(stopEditor(plan, md, di));
+    else {
+      plan.stops.filter((st) => st.day === di).forEach((st) => {
+        const t = st.kind === 'start' ? st.depart : (st.arrive ?? st.depart);
+        const si = plan.samples.findIndex((s) => s.day === di && s.stop != null && stopOf(plan, s) === st);
+        const w = si >= 0 && plan.weather ? plan.weather[si] : null;
+        let wx = '';
+        if (w) {
+          wx = `<div class="stop-wx">${w.t != null ? `<span>${n0(w.t)}°F</span>` : ''}`
+            + `${w.w != null ? `<span>${compass(w.d)} ${n0(w.w)}${w.g != null ? `–${n0(w.ghi ?? w.g)}` : ''} mph</span>` : ''}`
+            + `${(w.s ?? 0) >= 0.1 ? `<span class="s">snow ${inch(w.s, 1)}</span>` : ''}`
+            + `${(w.r ?? 0) >= 0.01 ? `<span class="r">rain ${inch(w.r)}</span>` : ''}</div>`;
+        }
+        // the computed time, and the written plan's time when they differ by more than 15 minutes
+        const drift = st.plan && t != null && Math.abs(t - st.plan) > 15 * 60 ? `<small class="plan-t">plan ${esc(fmtTime(st.plan, st.tz))}</small>` : '';
+        const row = document.createElement('div');
+        row.className = 'stop';
+        row.innerHTML = `<div class="stop-time">${esc(fmtTime(t, st.tz))}<small>${KIND_LABEL[st.kind] || st.kind}</small>${drift}</div>`
+          + `<div><div class="stop-name">${esc(st.name)}</div>${st.note ? `<div class="stop-note">${esc(st.note)}</div>` : ''}${wx}</div>`;
+        if (si >= 0) row.addEventListener('click', () => focusSample(plan, si));
+        box.appendChild(row);
+      });
+    }
+    if (md && di < plan.days.length - 1) box.appendChild(nightPicker(plan, di));
     host.appendChild(box);
   });
+
+  host.onclick = onItinClick;
+  host.onchange = onItinChange;
+}
+
+// Places along the route a stop can be moved or added to: planned stops and towns, by mile.
+function routePlaces(plan, fromMile, toMile) {
+  const out = [];
+  for (const s of plan.samples) {
+    if (!(s.mile > fromMile + 0.5 && s.mile < toMile - 0.5 && (s.stop != null || s.kind === 'town'))) continue;
+    if (out.length && Math.abs(out[out.length - 1].mile - s.mile) < 0.5) continue;  // a night is both an arrival and a start
+    out.push({ mile: s.mile, name: s.name, short: (stopOf(plan, s) || {}).short || s.name.split(' (')[0],
+      lat: s.lat, lon: s.lon, place: s.place, eta: s.eta, tz: s.tz });
+  }
+  return out;
+}
+
+function nightPicker(plan, di) {
+  const stops = plan.stops;
+  const dayStops = (d) => stops.filter((st) => st.day === d);
+  const a = dayStops(di)[0]; const night = dayStops(di).slice(-1)[0]; const b = dayStops(di + 1).slice(-1)[0];
+  const cands = routePlaces(plan, a.mile, b.mile);
+  if (!cands.some((c) => Math.abs(c.mile - night.mile) < 1)) cands.push({ mile: night.mile, short: night.short, name: night.name, place: night.place, eta: night.arrive, tz: night.tz });
+  cands.sort((x, y) => x.mile - y.mile);
+  // when you'd get there: as planned up to tonight's stop; past it, if you kept driving tonight
+  const arriveAt = (c) => (c.mile <= night.mile + 0.5 ? c.eta : night.arrive + ((c.mile - night.mile) / state.speed) * 3600);
+  const opts = cands.map((c, i) => {
+    const cur = Math.abs(c.mile - night.mile) < 1;
+    const t = cur ? night.arrive : arriveAt(c);
+    return `<option value="${i}"${cur ? ' selected' : ''}>${esc(c.short)} · mile ${Math.round(c.mile)}${t ? ` · ${c.mile > night.mile + 0.5 ? '~' : ''}${esc(fmtTime(t, c.tz, true))}` : ''}${cur ? ' (now)' : ''}</option>`;
+  }).join('');
+  const el = document.createElement('div');
+  el.className = 'ed-night';
+  el.innerHTML = `<label for="night-${di}">Night ${di + 1}</label><select id="night-${di}" data-act="night" data-day="${di}">${opts}</select>`
+    + '<small>Arrival times if you stop there. Moving the night re-times this day and the next.</small>';
+  el.querySelector('select')._cands = cands;
+  return el;
+}
+
+const STOP_KINDS = [['break', 'Break'], ['fuel', 'Fuel'], ['meal', 'Meal']];
+
+function stopEditor(plan, md, di) {
+  const wrap = document.createElement('div');
+  wrap.className = 'ed-stops';
+  const real = md.stops.map((s, i) => [s, i]).filter(([s]) => !Array.isArray(s.via));
+  real.forEach(([s, i], j) => {
+    const info = s.info || {};
+    const ends = j === 0 || j === real.length - 1;
+    const name = s.custom
+      ? `<input type="text" class="ed-name" value="${esc(s.custom.short || s.custom.name)}" data-act="name" data-day="${di}" data-i="${i}" aria-label="Stop name">`
+      : `<span class="ed-name">${esc(info.short || info.name || s.place)}</span>`;
+    const time = info.arrive || info.depart;
+    let ctl;
+    if (ends || s.kind === 'pass') ctl = `<span class="ed-kind">${KIND_LABEL[s.kind] || s.kind}</span>`;
+    else {
+      ctl = `<select data-act="kind" data-day="${di}" data-i="${i}" aria-label="Kind of stop">${STOP_KINDS.map(([k, l]) => `<option value="${k}"${s.kind === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`
+        + `<input type="number" min="0" max="600" step="5" value="${s.dwell ?? 0}" data-act="dwell" data-day="${di}" data-i="${i}" aria-label="Minutes at this stop"><span class="ed-unit">min</span>`
+        + `<button type="button" class="ed-x" data-act="remove" data-day="${di}" data-i="${i}" aria-label="Remove this stop" title="Remove">×</button>`;
+    }
+    wrap.insertAdjacentHTML('beforeend', `<div class="ed-stop"><span class="ed-time">${time ? esc(fmtTime(time, info.tz)) : ''}</span>${name}<span class="ed-ctl">${ctl}</span></div>`);
+  });
+  const first = real[0][0].info || {}; const last = real[real.length - 1][0].info || {};
+  const cands = routePlaces(plan, first.mile ?? 0, last.mile ?? 1e9).filter((c) => !md.stops.some((s) => s.place && s.place === c.place));
+  const add = document.createElement('div');
+  add.className = 'ed-add';
+  add.innerHTML = `<select data-act="add" data-day="${di}" aria-label="Add a stop"><option value="">+ Add a stop…</option>`
+    + `<option value="map">Pick a spot on the map</option>${cands.map((c, k) => `<option value="${k}">${esc(c.short)} · mile ${Math.round(c.mile)}</option>`).join('')}</select>`;
+  add.querySelector('select')._cands = cands;
+  wrap.appendChild(add);
+  return wrap;
+}
+
+// ---- edit actions ------------------------------------------------------------
+
+async function apiPost(path, body) {
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  let out = null;
+  try { out = await res.json(); } catch (e) { /* not json */ }
+  if (!res.ok) throw new Error((out && out.error) || res.statusText);
+  return out;
+}
+
+// Drop cached plans (and their lines on the map) so they're fetched again with new times.
+async function reloadPlans(keys) {
+  for (const k of keys) {
+    const lines = state.lines.get(k);
+    if (lines) { lines.forEach((l) => l.setMap(null)); state.lines.delete(k); }
+    state.plans.delete(k);
+  }
+  if (state.info) state.info.close();
+  await Promise.all([...state.visible].map((id) => ensurePlan(id)));
+}
+
+async function loadEditModel() {
+  const plan = focusPlan();
+  const flag = vkey(state.focus).endsWith('|1') ? 1 : 0;
+  const r = await api(`/api/edit?route=${state.focus}&portland=${flag}`);
+  state.edit.model = r.model;
+  state.edit.key = vkey(state.focus);
+  if (plan) plan.edited = r.edited;
+}
+
+async function saveModel(model) {
+  const ed = state.edit;
+  ed.busy = true; renderItinerary();
+  try {
+    const flag = ed.key.endsWith('|1') ? 1 : 0;
+    await apiPost('/api/edit', { route: ed.key.split('|')[0], portland: flag, model });
+    await reloadPlans([ed.key]);
+    await loadEditModel();
+  } catch (e) {
+    toast(`Couldn't save: ${e.message}`);
+  } finally {
+    ed.busy = false;
+    renderAll();
+  }
+}
+
+const cloneModel = () => JSON.parse(JSON.stringify(state.edit.model));
+const mileOf = (s) => (s.info ? s.info.mile : null);
+const asStop = (c, kind) => (c.place && !String(c.place).startsWith('c:') ? { place: c.place, kind }
+  : { custom: { name: c.name, short: c.short, lat: c.lat, lon: c.lon }, kind });
+
+// Move night `k` (the end of day k and start of day k+1) to place c along the route.
+function moveNight(model, k, c) {
+  const A = model.days[k].stops; const B = model.days[k + 1].stops;
+  let last = -1;
+  const seq = [...A.slice(0, -1).map((s) => [s, k]), ...B.slice(1).map((s) => [s, k + 1])]
+    .map(([s, from]) => { const m = mileOf(s) ?? last; last = m; return [s, m, from]; });
+  let idx = seq.findIndex(([, m]) => m > c.mile);
+  if (idx < 0) idx = seq.length;
+  const same = c.place ? seq.findIndex(([s]) => s.place === c.place) : -1;
+  let night = asStop(c, 'overnight');
+  if (same >= 0) { night = { ...seq[same][0] }; seq.splice(same, 1); idx = same; }
+  delete night.dwell; delete night.plan;
+  // a stop that moves to the other day no longer compares with its planned time
+  const onDay = (part, day) => part.map(([s, , from]) => (from === day ? s : { ...s, plan: undefined }));
+  model.days[k].stops = [...onDay(seq.slice(0, idx), k), { ...night, kind: 'overnight' }];
+  model.days[k + 1].stops = [{ ...night, kind: 'start', note: undefined }, ...onDay(seq.slice(idx), k + 1)];
+}
+
+function addStop(model, di, c) {
+  const stops = model.days[di].stops;
+  let idx = stops.findIndex((s, i) => i > 0 && mileOf(s) != null && mileOf(s) > c.mile);
+  if (idx < 1) idx = stops.length - 1;
+  stops.splice(idx, 0, { ...asStop(c, 'break'), dwell: 15 });
+}
+
+function onItinClick(e) {
+  const b = e.target.closest('[data-act]');
+  if (!b || b.tagName === 'SELECT' || b.tagName === 'INPUT') return;
+  const act = b.dataset.act;
+  if (act === 'edit') {
+    state.edit.on = true; state.edit.busy = true; renderItinerary();
+    loadEditModel().catch((err) => toast(`Couldn't load the schedule: ${err.message}`))
+      .finally(() => { state.edit.busy = false; renderItinerary(); });
+  } else if (act === 'done') {
+    Object.assign(state.edit, { on: false, model: null, pick: null }); state.edit.adv.clear();
+    mapNotice(''); renderItinerary();
+  } else if (act === 'reset') {
+    const key = vkey(state.focus);
+    if (!window.confirm('Put this route back to the plan in trip.json? Your edits to it will be lost.')) return;
+    apiPost('/api/edit/reset', { route: state.focus, portland: key.endsWith('|1') ? 1 : 0 })
+      .then(() => reloadPlans([key]))
+      .then(() => (state.edit.on ? loadEditModel() : null))
+      .catch((err) => toast(`Couldn't reset: ${err.message}`))
+      .finally(() => renderAll());
+  } else if (act === 'adv') {
+    const di = +b.dataset.day;
+    if (state.edit.adv.has(di)) state.edit.adv.delete(di); else state.edit.adv.add(di);
+    renderItinerary();
+  } else if (act === 'remove') {
+    const m = cloneModel();
+    m.days[+b.dataset.day].stops.splice(+b.dataset.i, 1);
+    saveModel(m);
+  }
+}
+
+function onItinChange(e) {
+  const el = e.target;
+  const act = el.dataset.act;
+  if (!act || !state.edit.model) return;
+  const di = +el.dataset.day;
+  const m = cloneModel();
+  if (act === 'depart') {
+    if (!el.value) return;
+    m.days[di].depart = el.value;
+  } else if (act === 'night') {
+    moveNight(m, di, el._cands[+el.value]);
+  } else if (act === 'kind') {
+    const s = m.days[di].stops[+el.dataset.i];
+    s.kind = el.value; s.dwell = { break: 15, fuel: 30, meal: 40 }[el.value];
+  } else if (act === 'dwell') {
+    m.days[di].stops[+el.dataset.i].dwell = Math.max(0, Math.min(600, Math.round(+el.value || 0)));
+  } else if (act === 'name') {
+    const c = m.days[di].stops[+el.dataset.i].custom;
+    c.name = c.short = el.value.trim() || 'Stop';
+  } else if (act === 'add') {
+    if (el.value === 'map') {
+      state.edit.pick = di;
+      mapNotice('Click the map where you want to stop (Esc cancels).');
+      el.value = '';
+      return;
+    }
+    if (el.value === '') return;
+    addStop(m, di, el._cands[+el.value]);
+  } else return;
+  saveModel(m);
+}
+
+// Map click while picking a spot for a new stop (see the "Pick a spot on the map" option).
+function onMapPick(latLng) {
+  const di = state.edit.pick;
+  if (di == null || !state.edit.model) return false;
+  state.edit.pick = null;
+  mapNotice('');
+  const plan = focusPlan();
+  const lat = latLng.lat(); const lon = latLng.lng();
+  let best = null; let bd = Infinity;
+  for (const s of plan.samples) {
+    if (s.day !== di) continue;
+    const d = (s.lat - lat) ** 2 + ((s.lon - lon) * Math.cos(lat * Math.PI / 180)) ** 2;
+    if (d < bd) { bd = d; best = s; }
+  }
+  const near = best ? best.name.replace(/^Between /, '').split(' and ')[0].split(' (')[0] : 'route';
+  const m = cloneModel();
+  addStop(m, di, { name: `Stop near ${near}`, short: `Near ${near}`, lat, lon, mile: best ? best.mile : 0 });
+  saveModel(m);
+  return true;
 }
 
 function renderSources() {
@@ -1277,7 +1538,32 @@ function initNav() {
   });
   document.addEventListener('keydown', (e) => {
     const typing = e.target instanceof Element && e.target.closest('input, textarea');
-    if (e.key === 'Escape' && state.span && !typing) setSpan(null);
+    if (e.key !== 'Escape' || typing) return;
+    if (state.edit.pick != null) { state.edit.pick = null; mapNotice(''); return; }  // cancel picking a spot
+    if (state.span) setSpan(null);
+  });
+}
+
+// Cruise speed: drive times follow the slider live; letting go saves it and re-times every route.
+function initSpeed() {
+  const el = $('#speed'); const out = $('#speed-val');
+  state.speed = state.cfg.speed || 60;
+  el.value = state.speed;
+  const show = () => { out.textContent = `${el.value} mph`; };
+  show();
+  el.addEventListener('input', () => {
+    show();
+    state.speed = +el.value;
+    renderRoutes(); renderItinerary();
+  });
+  el.addEventListener('change', async () => {
+    try {
+      const r = await apiPost('/api/speed', { speed: +el.value });
+      state.speed = r.speed;
+      await reloadPlans([...state.plans.keys()]);
+      if (state.edit.on) await loadEditModel();
+      renderAll();
+    } catch (e) { toast(`Couldn't change the speed: ${e.message}`); }
   });
 }
 
@@ -1346,6 +1632,7 @@ async function boot() {
     state.portland = !!state.cfg.default_portland;
   }
   if (!state.focus || !state.visible.has(state.focus)) state.focus = [...state.visible][0];
+  initSpeed();
   const pc = $('#portland');
   pc.checked = state.portland;
   pc.addEventListener('change', () => setPortland(pc.checked));

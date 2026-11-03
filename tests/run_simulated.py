@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -33,6 +34,8 @@ server.CACHE = server.DiskCache(cache_dir)
 server.CACHE_DIR = cache_dir
 server.METER = server.UsageMeter(os.path.join(cache_dir, "google_usage.json"))
 server.OM_BUDGET = server.CallBudget("Open-Meteo", [(60, 1e9)])  # no pacing here; CallBudget is checked below
+server.TRIP_LOCAL_PATH = os.path.join(cache_dir, "trip.local.json")  # never touch the real edits
+server.TRIP_LOCAL.clear()
 server.CONFIG["google_maps_api_key"] = "TEST-KEY" if route_mode == "google" else ""
 server.CONFIG["sources"]["google_weather"] = True  # off in config.json, but the code path is still tested
 for t in server.THROTTLE.values():
@@ -49,6 +52,25 @@ failures = []
 def get(path):
     with urllib.request.urlopen(BASE + path, timeout=120) as r:
         return json.loads(r.read())
+
+
+def post(path, body, ctype="application/json"):
+    req = urllib.request.Request(BASE + path, data=json.dumps(body).encode(), method="POST", headers={"Content-Type": ctype})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read() or b"{}")
+
+
+def wait_weather(path):
+    plan = get(path)
+    for _ in range(400):
+        if not plan["status"]["queued"]:
+            break
+        time.sleep(0.25)
+        plan = get(path + "&geom=0")
+    return plan
 
 
 def check(cond, msg):
@@ -102,6 +124,55 @@ before = len(fakeapis.CALLS)
 for rid, pl in variants:
     get("/api/plan?route=%s&portland=%d" % (rid, pl))
 check(len(fakeapis.CALLS) == before, "repeat requests served from cache (no outside calls)")
+
+# ---- schedule: speed and edits ----------------------------------------------------
+print("\nSchedule editing")
+base = plans[("r1", 1)]
+d0 = [s for s in base["stops"] if s["day"] == 0]
+leg_h = (d0[1]["arrive"] - d0[0]["depart"]) / 3600.0
+leg_mi = d0[1]["mile"] - d0[0]["mile"]
+check(abs(leg_h - leg_mi / 60.0) < 0.02, "a leg takes miles / 60 mph (%.0f mi in %.2f h)" % (leg_mi, leg_h))
+check(abs((d0[1]["depart"] - d0[1]["arrive"]) / 60 - 15) < 0.5, "planned 15-minute break kept")
+
+code, r = post("/api/speed", {"speed": 50})
+slow = get("/api/plan?route=r1&portland=1&geom=0")
+rs_fast = d0[-1]["arrive"]
+rs_slow = [s for s in slow["stops"] if s["day"] == 0][-1]["arrive"]
+check(code == 200 and rs_slow - rs_fast > 1800, "50 mph gets to Rock Springs later (%+.0f min)" % ((rs_slow - rs_fast) / 60))
+post("/api/speed", {"speed": 60})
+
+code, _ = post("/api/speed", {"speed": 50}, ctype="text/plain")
+check(code == 415, "a non-JSON POST (another web page) is refused")
+
+ed = get("/api/edit?route=r1&portland=1")
+check(not ed["edited"] and len(ed["model"]["days"]) == 3, "unedited route comes back as the plan")
+m = ed["model"]
+day1, day2 = m["days"][0]["stops"], m["days"][1]["stops"]
+sinclair = [s for s in day1 if s.get("place") == "sinclair_stinker"][0]
+# drive less on day 1: sleep at the Sinclair fuel stop instead of Rock Springs
+m["days"][0]["stops"] = [s for s in day1 if s.get("place") != "rs_spark"]
+m["days"][0]["stops"][-1] = {"place": "sinclair_stinker", "kind": "overnight"}
+m["days"][1]["stops"] = [{"place": "sinclair_stinker", "kind": "start"}] + day2[1:]
+code, r = post("/api/edit", {"route": "r1", "portland": 1, "model": m})
+check(code == 200, "edited schedule saved")
+check(os.path.exists(server.TRIP_LOCAL_PATH), "edits written to trip.local.json")
+ep = wait_weather("/api/plan?route=r1&portland=1")
+e0 = [s for s in ep["stops"] if s["day"] == 0]
+e1 = [s for s in ep["stops"] if s["day"] == 1]
+check(ep["edited"] and e0[-1]["place"] == "sinclair_stinker" and e1[0]["place"] == "sinclair_stinker",
+      "night 1 is now at Sinclair (%s)" % ep["days"][0]["title"])
+check(abs(ep["total_miles"] - base["total_miles"]) < 40, "total distance about the same (%d vs %d mi)" % (ep["total_miles"], base["total_miles"]))
+check(all(w for w in ep["weather"]), "every sample of the edited route has weather")
+check(e0[-1]["arrive"] < rs_fast, "day 1 ends earlier")
+
+bad = json.loads(json.dumps(m))
+bad["days"][0]["stops"] = bad["days"][0]["stops"][:1]
+code, r = post("/api/edit", {"route": "r1", "portland": 1, "model": bad})
+check(code == 400, "a day without an end is rejected (%s)" % r.get("error"))
+
+code, _ = post("/api/edit/reset", {"route": "r1", "portland": 1})
+back = get("/api/plan?route=r1&portland=1&geom=0")
+check(code == 200 and not back["edited"] and back["days"][0]["title"] == base["days"][0]["title"], "reset puts the plan back")
 
 # ---- rate limits ----------------------------------------------------------------
 print("\nRate limits")

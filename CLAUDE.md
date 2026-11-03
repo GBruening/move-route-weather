@@ -24,6 +24,7 @@ each point**, aggregated from several sources. The owner runs it on **Windows**
 
 | File | What it is |
 |---|---|
+| `trip.local.json` | Edits made in the app (per-variant schedules, cruise speed). Git-ignored; delete it to go back to `trip.json`. |
 | `trip.json` | The plan: `places` (stops with lat/lon and, where known, street address), `days` (day templates with timed stops), `routes` (which days make each route, with or without the Portland detour), `landmarks` (passes and towns used as extra sample points). |
 | `server.py` | Routing, sampling, arrival-time estimation, weather fetching, caching, aggregation, HTTP API, static file server. |
 | `static/app.js` | Map (Google Maps JS API), weather glyph overlay, sidebar (route cards, toggles, watch list, itinerary, source status), profile chart. |
@@ -54,9 +55,21 @@ Route-card badges come from `badge` / `badge_portland`; `portland` is `toggle` (
   results are cached permanently, keyed by waypoints.
 - **Samples**: every stop, every `landmarks` entry within 6 km of the route (passes kept ≥3 mi
   from others, towns ≥7 mi), plus fill points so gaps stay ≲25 mi.
+- **Schedule** (`template_model`, `variant_model`, `timed_day`): each route variant is a model,
+  a list of days. Each day has a date, a departure time (local wall clock), and stops with how
+  many minutes are spent at each. Stops are a `place` id, a `custom` {name, lat, lon}, or a
+  routing-only `via`. Times are always computed: departure + leg distance ÷ cruise speed +
+  time at each stop. The speed is `trip_speed()`, set from the page; default `truck_mph` 60.
+  An unedited variant's model comes from `trip.json`: its stop lengths are the planned
+  depart − arrive, and the planned arrival is kept as `plan` so the itinerary can show drift
+  over 15 min. Edited models are saved per variant (`"r1|1"`) in **`trip.local.json`**
+  (git-ignored), along with `speed`. `timed_day` registers each computed day in `DAYS` under a
+  content-hash id, so `build_day` and its caches work unchanged.
 - **Arrival time** at a sample = linear interpolation by distance between the previous stop's
-  departure and the next stop's arrival. Default dwell if a stop has no depart time:
-  break 15, fuel 30, meal 40 min.
+  departure and the next stop's arrival. Passes and other untimed markers get an
+  interpolated time.
+- **Forecast points** are keyed (`lk`) on a 0.05° grid (about 5 km), so moved stops and the
+  other routes reuse cached forecasts.
 - **Time zone labels**: `tz_for()` — Pacific for Oregon west of Ontario, Washington, and the
   Idaho Panhandle west of Lookout Pass; Mountain otherwise.
 - **Sources** (each normalized to "members": `inst` [[t, temp_c, wind_kmh, dir, gust_kmh]],
@@ -97,8 +110,11 @@ Route-card badges come from `badge` / `badge_portland`; `portland` is `toggle` (
   429s aren't counted. Usage and an estimated charge show in the sources panel.
 - **API**: `GET /api/config`; `GET /api/plan?route=r1&portland=1[&geom=0][&weather=0]` returns
   days, stops, samples (with `eta`, `x` chart position, `tz`), per-day paths, aggregated
-  weather and per-source status including `queued`. The page polls every 2.5 s while anything
-  is queued.
+  weather and per-source status including `queued`. It also returns `speed` and `edited`.
+  The page polls every 2.5 s while anything is queued. `GET /api/edit?route=&portland=`
+  returns the editable model, each stop annotated with `info` (mile, times). `POST /api/edit`
+  {route, portland, model}, `POST /api/edit/reset` and `POST /api/speed` {speed} require
+  `Content-Type: application/json`, so other web pages can't post to them cross-site.
 
 ## Front end (static/app.js)
 
@@ -117,6 +133,14 @@ Route-card badges come from `badge` / `badge_portland`; `portland` is `toggle` (
   stretch. The window can be moved and its edges dragged. The chart then shows only that
   stretch, with its scales rescaled and fuel stops, breaks, passes and towns named; the map
   fits to it. The selection is cleared when the focused route changes.
+- Route cards show miles and driving time (miles ÷ cruise speed). The Cruise speed slider
+  (45–70) updates those live and, when released, saves the speed and re-times every route.
+- Itinerary **Edit schedule** (`state.edit`, `moveNight`, `addStop`, `stopEditor`): set each
+  day's departure, and use the Night N picker to move a night to any planned stop or town
+  between the neighbouring days. The old hotel is dropped, and stops moved to the other day
+  lose their `plan` time. "Edit stops" per day changes a stop's kind and minutes, removes
+  stops, or adds a town along the route or a spot clicked on the map. Every change is saved
+  at once, and "Reset to plan" removes the edits.
 - Panes: drag splitters resize the sidebar and the chart (double-click resets). The sidebar,
   the chart and each sidebar section can also be collapsed. The state is saved in prefs `ui`.
 - Preferences are kept in `localStorage` key `move-weather-prefs-v2` (bump the key when

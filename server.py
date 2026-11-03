@@ -32,7 +32,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -853,6 +853,7 @@ def build_day(day_id):
                 "kind": s.get("kind", "break"), "note": s.get("note", ""),
                 "lat": round(lat, 5), "lon": round(lon, 5), "m": m,
                 "arrive": arrive, "depart": depart, "tz": tz_for(lat, lon),
+                "plan": parse_iso(s["plan"]) if s.get("plan") else None,
             })
 
         # Timed events for interpolation: (m, arrive_ts, depart_ts)
@@ -883,6 +884,10 @@ def build_day(day_id):
             if m1 <= m0:
                 return a1
             return d0 + (m - m0) / (m1 - m0) * (a1 - d0)
+
+        for st in out_stops:  # passes and other untimed markers: when you get there
+            if st["arrive"] is None and st["depart"] is None and events:
+                st["arrive"] = st["depart"] = eta(st["m"])
 
         # Named sample points: stops, then passes, then towns (spaced out)
         lat_lo = min(p[0] for p in pts) - 0.1
@@ -941,7 +946,9 @@ def build_day(day_id):
                 "m": s["m"], "eta": t, "heading": round(_heading(pts, cum, s["m"])),
                 "name": s["name"], "kind": s["kind"], "stop": s["stop"], "place": s["place"],
                 "key": s["key"], "tz": tz_for(s["lat"], s["lon"]),
-                "lk": "%.3f,%.3f" % (s["lat"], s["lon"]),
+                # forecasts are looked up on a ~5 km grid, so moved stops and other routes
+                # reuse what is already cached instead of fetching new points
+                "lk": "%.2f,%.2f" % (round(s["lat"] * 20) / 20, round(s["lon"] * 20) / 20),
             })
 
         built = {
@@ -962,8 +969,204 @@ def route_days(route_id, portland):
     return r["days"]
 
 
+# --------------------------------------------------------------------------
+# Editable schedule. Every route variant is a list of days, each a departure time plus
+# stops with how long you spend at each. Times are worked out from those and the cruise
+# speed, so moving a night or changing the speed re-times the trip. Edits are saved per
+# variant in trip.local.json (git-ignored); variants without edits come from trip.json.
+# --------------------------------------------------------------------------
+
+TRIP_LOCAL_PATH = os.path.join(HERE, "trip.local.json")
+LOCAL_LOCK = threading.Lock()
+
+
+def _load_local():
+    try:
+        d = _load_json(TRIP_LOCAL_PATH)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+TRIP_LOCAL = _load_local()
+
+
+def save_local():
+    with LOCAL_LOCK:
+        tmp = TRIP_LOCAL_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(TRIP_LOCAL, f, indent=1)
+        os.replace(tmp, TRIP_LOCAL_PATH)
+
+
+def trip_speed():
+    try:
+        return max(30.0, min(80.0, float(TRIP_LOCAL.get("speed") or CONFIG.get("truck_mph", 60))))
+    except (TypeError, ValueError):
+        return 60.0
+
+
+def variant_key(route_id, portland):
+    return "%s|%d" % (route_id, 1 if portland and ROUTES[route_id].get("portland_days") else 0)
+
+
+def _tz_offset_h(lat, lon, ts):
+    pac = _pacific_offset_h(ts)
+    return pac if tz_for(lat, lon) == "America/Los_Angeles" else pac + 1
+
+
+def _iso_at(ts, lat, lon):
+    off = _tz_offset_h(lat, lon, ts)
+    return datetime.fromtimestamp(ts, timezone.utc).astimezone(
+        timezone(timedelta(hours=off))).isoformat(timespec="seconds")
+
+
+def template_model(route_id, portland):
+    """The editable form of a variant as trip.json plans it."""
+    days = []
+    for did in route_days(route_id, portland):
+        d = DAYS[did]
+        stops = []
+        for s in d["stops"]:
+            if isinstance(s.get("via"), list):  # routing-only waypoint, kept as is
+                stops.append({"via": s["via"], "name": s.get("name", "via")})
+                continue
+            st = {"place": s["place"], "kind": s.get("kind", "break")}
+            if s.get("via") is False:
+                st["via"] = False
+            if s.get("note"):
+                st["note"] = s["note"]
+            a, dp = s.get("arrive"), s.get("depart")
+            if st["kind"] not in ("start", "overnight", "end", "pass"):
+                st["dwell"] = round((parse_iso(dp) - parse_iso(a)) / 60) if a and dp else DWELL_MIN.get(st["kind"], 15)
+            if a:
+                st["plan"] = a  # the planned arrival, shown when the computed time drifts from it
+            stops.append(st)
+        dep = d["stops"][0]["depart"]
+        days.append({"src": did, "label": d.get("label", ""), "title": d.get("title", ""), "note": d.get("note", ""),
+                     "estimated": bool(d.get("estimated")), "date": dep[:10], "depart": dep[11:16], "stops": stops})
+    return {"days": days}
+
+
+def variant_model(route_id, portland):
+    m = (TRIP_LOCAL.get("variants") or {}).get(variant_key(route_id, portland))
+    return (m, True) if m else (template_model(route_id, portland), False)
+
+
+def _place_of(s):
+    """-> (place_id, place) for a model stop, registering custom places in PLACES."""
+    if s.get("place"):
+        if s["place"] not in PLACES:
+            raise ValueError("unknown place %r" % s["place"])
+        return s["place"], PLACES[s["place"]]
+    c = s.get("custom") or {}
+    p = {"name": str(c.get("name") or "Stop")[:80], "lat": float(c["lat"]), "lon": float(c["lon"])}
+    p["short"] = str(c.get("short") or p["name"])[:40]
+    if c.get("address"):
+        p["address"] = str(c["address"])[:200]
+    pid = "c:" + hashlib.sha1(json.dumps(p, sort_keys=True).encode()).hexdigest()[:12]
+    PLACES[pid] = p
+    return pid, p
+
+
+def _day_ends(stops):
+    real = [s.get("place") for s in stops if not isinstance(s.get("via"), list)]
+    return (real[0], real[-1]) if real else None
+
+
+def timed_day(md, speed):
+    """Turn one model day into a trip.json-style day with times; returns its id in DAYS."""
+    stops = []
+    for s in md["stops"]:
+        if isinstance(s.get("via"), list):
+            stops.append({"via": [float(s["via"][0]), float(s["via"][1])], "name": s.get("name", "via")})
+            continue
+        pid, _ = _place_of(s)
+        st = {"place": pid, "kind": s.get("kind", "break"), "dwell": int(s.get("dwell") or 0)}
+        for k in ("note", "plan"):
+            if s.get(k):
+                st[k] = s[k]
+        if s.get("via") is False:
+            st["via"] = False
+        stops.append(st)
+    routed = [i for i, s in enumerate(stops) if _is_routed(s)]
+    wps = []
+    for i in routed:
+        p = _stop_place(stops[i])
+        wps.append({"lat": p["lat"], "lon": p["lon"], "address": p.get("address")})
+    route, _ = compute_route(wps)
+    via_m = route.get("via_m") or []
+    if len(via_m) != len(wps):  # routing gave no leg distances: straight lines, padded for curves
+        via_m, acc = [0.0], 0.0
+        for a, b in zip(wps, wps[1:]):
+            acc += haversine_m(a["lat"], a["lon"], b["lat"], b["lon"]) * 1.2
+            via_m.append(acc)
+
+    first = _stop_place(stops[0])
+    hh, mm = (int(x) for x in md["depart"].split(":"))
+    y, mo, dd = (int(x) for x in md["date"].split("-"))
+    local = datetime(y, mo, dd, hh, mm, tzinfo=timezone.utc).timestamp()
+    t = local - _tz_offset_h(first["lat"], first["lon"], local - 7 * 3600) * 3600
+    prev_m = None
+    for k, i in enumerate(routed):
+        st = stops[i]
+        if prev_m is not None:
+            t += (via_m[k] - prev_m) / M_PER_MI / speed * 3600
+        prev_m = via_m[k]
+        if isinstance(st.get("via"), list):
+            continue  # routing-only: no time of its own
+        p = _stop_place(st)
+        if k > 0:
+            st["arrive"] = _iso_at(t, p["lat"], p["lon"])
+        if k < len(routed) - 1:
+            t += st.get("dwell", 0) * 60
+            st["depart"] = _iso_at(t, p["lat"], p["lon"])
+    for st in stops:
+        st.pop("dwell", None)
+
+    # keep the planned title and note while the day still starts and ends where trip.json says
+    src = DAYS.get(md.get("src")) or {}
+    same_ends = bool(src) and _day_ends(src.get("stops", [])) == _day_ends(stops)
+    tpl = {
+        "label": md.get("label", ""),
+        "title": md.get("title") if same_ends and md.get("title") else
+        "%s → %s" % (_stop_place(stops[0]).get("short"), _stop_place(stops[-1]).get("short")),
+        "note": md.get("note", "") if same_ends else "",
+        "estimated": bool(md.get("estimated")), "stops": stops,
+    }
+    did = "t:" + hashlib.sha1(json.dumps(tpl, sort_keys=True).encode()).hexdigest()[:16]
+    DAYS[did] = tpl
+    return did
+
+
+def validate_model(model):
+    days = model.get("days") if isinstance(model, dict) else None
+    if not isinstance(days, list) or not 1 <= len(days) <= 6:
+        raise ApiError("a plan needs 1 to 6 days")
+    for di, d in enumerate(days):
+        stops = d.get("stops")
+        if not isinstance(stops, list) or len([s for s in stops if not isinstance(s.get("via"), list)]) < 2:
+            raise ApiError("day %d needs a start and an end" % (di + 1))
+        if not re.match(r"^\d{4}-\d\d-\d\d$", str(d.get("date", ""))) or not re.match(r"^\d\d?:\d\d$", str(d.get("depart", ""))):
+            raise ApiError("day %d has a bad date or departure time" % (di + 1))
+        real = [s for s in stops if not isinstance(s.get("via"), list)]
+        if real[0].get("kind") != "start" or real[-1].get("kind") not in ("overnight", "end"):
+            raise ApiError("day %d must begin with a start and finish with a night or the end" % (di + 1))
+        for s in real:
+            if s.get("kind") not in ("start", "break", "fuel", "meal", "pass", "overnight", "end"):
+                raise ApiError("unknown stop kind %r" % s.get("kind"))
+            if not 0 <= int(s.get("dwell") or 0) <= 600:
+                raise ApiError("stop times must be 0-600 minutes")
+            try:
+                _place_of(s)
+            except (KeyError, TypeError, ValueError) as e:
+                raise ApiError("bad stop: %s" % e)
+
+
 def build_plan(route_id, portland):
-    days = [build_day(d) for d in route_days(route_id, portland)]
+    model, edited = variant_model(route_id, portland)
+    speed = trip_speed()
+    days = [build_day(timed_day(md, speed)) for md in model["days"]]
     out_days, stops, samples, paths = [], [], [], []
     offset_m = 0.0
     for di, d in enumerate(days):
@@ -994,7 +1197,7 @@ def build_plan(route_id, portland):
     return {
         "route": route_id, "name": r["name"], "short": r.get("short", ""), "color": r.get("color", "#475569"),
         "portland": bool(portland and r.get("portland_days")),
-        "total_miles": round(offset_m / M_PER_MI),
+        "total_miles": round(offset_m / M_PER_MI), "speed": speed, "edited": edited,
         "days": out_days, "stops": stops, "samples": samples, "paths": paths,
     }
 
@@ -1006,7 +1209,8 @@ def _trip_window():
             for k in ("arrive", "depart"):
                 if s.get(k):
                     ts.append(parse_iso(s[k]))
-    return min(ts) - 6 * 3600, max(ts) + 6 * 3600
+    # extra room at the end: edits and a slower speed push arrivals later
+    return min(ts) - 6 * 3600, max(ts) + 18 * 3600
 
 
 WINDOW_START, WINDOW_END = _trip_window()
@@ -1749,14 +1953,75 @@ def api_config():
         "default_focus": default_focus,
         "default_portland": bool(TRIP.get("default_portland", False)),
         "window_half_minutes": WINDOW_HALF // 60,
+        "speed": trip_speed(),
+        "edited": sorted((TRIP_LOCAL.get("variants") or {}).keys()),
     }
 
 
-def api_plan(q):
+def _route_args(q):
     route = (q.get("route") or [""])[0]
     if route not in ROUTES:
         raise ApiError("unknown route")
-    portland = (q.get("portland") or ["0"])[0] in ("1", "true", "yes")
+    portland = str((q.get("portland") or ["0"])[0]) in ("1", "true", "yes", "True")
+    return route, portland
+
+
+def api_edit_get(q):
+    """The editable schedule of one variant, each stop annotated with where and when it falls."""
+    route, portland = _route_args(q)
+    model, edited = variant_model(route, portland)
+    model = json.loads(json.dumps(model))
+    plan = build_plan(route, portland)
+    by_day = {}
+    for st in plan["stops"]:
+        by_day.setdefault(st["day"], []).append(st)
+    for di, md in enumerate(model["days"]):
+        placed = iter(by_day.get(di, []))
+        for s in md["stops"]:
+            if isinstance(s.get("via"), list):
+                continue
+            p = next(placed, None)
+            if p:
+                s["info"] = {k: p.get(k) for k in ("name", "short", "mile", "lat", "lon", "arrive", "depart", "tz")}
+    return {"route": route, "portland": portland, "edited": edited, "speed": trip_speed(), "model": model}
+
+
+def _strip_info(model):
+    for d in model.get("days") or []:
+        for s in d.get("stops") or []:
+            if isinstance(s, dict):
+                s.pop("info", None)
+    return model
+
+
+def api_edit_post(body):
+    route, portland = _route_args({"route": [body.get("route")], "portland": [body.get("portland")]})
+    model = _strip_info(body.get("model") or {})
+    validate_model(model)
+    TRIP_LOCAL.setdefault("variants", {})[variant_key(route, portland)] = model
+    save_local()
+    log("schedule edited: %s" % variant_key(route, portland))
+    return {"ok": True}
+
+
+def api_edit_reset(body):
+    route, portland = _route_args({"route": [body.get("route")], "portland": [body.get("portland")]})
+    (TRIP_LOCAL.get("variants") or {}).pop(variant_key(route, portland), None)
+    save_local()
+    return {"ok": True}
+
+
+def api_speed(body):
+    try:
+        TRIP_LOCAL["speed"] = max(30, min(80, round(float(body.get("speed")))))
+    except (TypeError, ValueError):
+        raise ApiError("speed must be a number")
+    save_local()
+    return {"ok": True, "speed": trip_speed()}
+
+
+def api_plan(q):
+    route, portland = _route_args(q)
     want_geom = (q.get("geom") or ["1"])[0] != "0"
     want_weather = (q.get("weather") or ["1"])[0] != "0"
     plan = build_plan(route, portland)
@@ -1807,6 +2072,8 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json(api_config())
                 if u.path == "/api/plan":
                     return self.send_json(api_plan(q))
+                if u.path == "/api/edit":
+                    return self.send_json(api_edit_get(q))
                 return self.send_json({"error": "not found"}, 404)
             except ApiError as e:
                 return self.send_json({"error": str(e)}, 400)
@@ -1814,6 +2081,31 @@ class Handler(SimpleHTTPRequestHandler):
                 traceback.print_exc()
                 return self.send_json({"error": "server error: %s" % e}, 500)
         return super().do_GET()
+
+    def do_POST(self):
+        u = urllib.parse.urlparse(self.path)
+        handlers = {"/api/edit": api_edit_post, "/api/edit/reset": api_edit_reset, "/api/speed": api_speed}
+        if u.path not in handlers:
+            return self.send_json({"error": "not found"}, 404)
+        # JSON only: other web pages can't send that cross-site without a CORS preflight,
+        # which this server never approves, so they can't change the saved plan
+        if "application/json" not in (self.headers.get("Content-Type") or ""):
+            return self.send_json({"error": "expected application/json"}, 415)
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 200000:
+                raise ApiError("request too large")
+            body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+            if not isinstance(body, dict):
+                raise ApiError("expected a JSON object")
+            return self.send_json(handlers[u.path](body))
+        except ApiError as e:
+            return self.send_json({"error": str(e)}, 400)
+        except ValueError as e:
+            return self.send_json({"error": "bad request: %s" % e}, 400)
+        except Exception as e:
+            traceback.print_exc()
+            return self.send_json({"error": "server error: %s" % e}, 500)
 
 
 _workers_started = False

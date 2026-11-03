@@ -19,6 +19,12 @@
       <h2><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="sec-routes">Routes</button></h2>
       <div class="sec-body" id="sec-routes">
         <div id="routes" class="routes"></div>
+        <div class="speed-row">
+          <label for="speed">Cruise speed</label>
+          <input type="range" id="speed" min="45" max="70" step="1" value="60">
+          <output id="speed-val" for="speed">60 mph</output>
+          <small>Each day is timed from its departure at this speed, plus your time at each stop. The truck tops out at 65.</small>
+        </div>
         <label class="switch-row">
           <input type="checkbox" id="portland">
           <span class="switch" aria-hidden="true"></span>

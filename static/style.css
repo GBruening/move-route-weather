@@ -117,6 +117,14 @@ button { font: inherit; color: inherit; }
 .eye:hover { background: var(--line-2); }
 .eye svg { width: 16px; height: 16px; }
 
+/* cruise speed */
+.speed-row { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; margin: 12px 0 2px; }
+.speed-row label { font-size: 13.5px; font-weight: 650; }
+.speed-row input { width: 100%; accent-color: var(--accent); margin: 0; }
+.speed-row output { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; min-width: 52px; text-align: right; }
+.speed-row small { grid-column: 1 / -1; color: var(--ink-3); font-size: 12px; line-height: 1.35; }
+.drive { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+
 /* switch */
 .switch-row { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; margin: 12px 0 4px; cursor: pointer; }
 .switch-row input { position: absolute; opacity: 0; pointer-events: none; }
@@ -231,6 +239,47 @@ button { font: inherit; color: inherit; }
 .lg-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .lg-row svg { display: block; }
 .lg-k { min-width: 38px; color: var(--ink-3); }
+.lg-k small { display: block; font-size: 10.5px; }
+.lg-wind-row { align-items: flex-end; }
+.lg-wind { display: grid; grid-template-columns: repeat(5, auto); gap: 0 7px; align-items: end; }
+.lg-wc { display: grid; justify-items: center; gap: 2px; }
+.lg-wc > span { font-size: 10.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* itinerary editor */
+.itin-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.ed-btn {
+  height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+  font-size: 12px; font-weight: 600; color: var(--ink-2); cursor: pointer; transition: background-color .15s, border-color .15s;
+}
+.ed-btn:hover { background: var(--line-2); }
+.ed-btn.is-primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+.ed-btn.is-primary:hover { background: #2d3843; }
+.ed-btn:focus-visible, .ed-link:focus-visible, .ed-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ed-status { font-size: 11.5px; color: var(--ink-3); margin-left: auto; }
+.ed-link { border: 0; background: none; padding: 2px 4px; margin-left: auto; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 4px; }
+.ed-link:hover { text-decoration: underline; }
+.ed-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; font-size: 12.5px; color: var(--ink-2); }
+.itin input[type="time"], .itin input[type="number"], .itin input[type="text"], .itin select {
+  font: inherit; font-size: 12.5px; color: var(--ink); background: var(--panel);
+  border: 1px solid #cfd5cf; border-radius: 6px; padding: 3px 6px; min-width: 0;
+}
+.itin input:focus-visible, .itin select:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+.ed-night { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; align-items: center; margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #f7f8f6; font-size: 12.5px; }
+.ed-night label { font-weight: 650; }
+.ed-night small { grid-column: 1 / -1; color: var(--ink-3); font-size: 11.5px; }
+.ed-stops { display: grid; gap: 2px; }
+.ed-stop { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 2px 8px; padding: 6px 0; border-top: 1px solid var(--line-2); align-items: center; font-size: 12.5px; }
+.ed-time { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ed-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-ctl { grid-column: 2; display: flex; align-items: center; gap: 6px; }
+.ed-ctl input[type="number"] { width: 58px; }
+.ed-kind { font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); }
+.ed-unit { color: var(--ink-3); font-size: 12px; }
+.ed-x { margin-left: auto; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink-3); font-size: 15px; line-height: 1; cursor: pointer; }
+.ed-x:hover { color: var(--bad); border-color: #f0b4b4; }
+.ed-add { padding-top: 6px; border-top: 1px solid var(--line-2); }
+.ed-add select { width: 100%; }
+.plan-t { color: #92400e; }
 .lg-note { margin-top: 6px; color: var(--ink-3); line-height: 1.35; }
 
 /* weather glyphs on the map */
