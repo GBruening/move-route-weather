@@ -50,8 +50,12 @@ DEFAULT_CONFIG = {
     "ttl_minutes": {"open_meteo": 180, "nws": 120, "met_no": 120, "google_weather": 360},
     "error_retry_minutes": 15,
     "sample_spacing_miles": 25,
-    "open_meteo_models": ["gfs_seamless", "ecmwf_ifs025", "gem_seamless", "icon_seamless", "ncep_nbm_conus"],
+    "open_meteo_models": ["gfs_seamless", "ecmwf_ifs025", "gem_seamless", "icon_seamless", "ncep_nbm_conus",
+                          "ukmo_seamless"],
     "osrm_url": "https://router.project-osrm.org",
+    # Billable Google calls allowed per calendar month (Pacific time, like Google's billing month).
+    # Kept under Google's free 10,000 per SKU so the bill stays $0; 0 blocks that SKU entirely.
+    "google_monthly_caps": {"weather": 9000, "routes": 1000, "maps_js": 3000},
 }
 
 
@@ -285,13 +289,163 @@ def get_backoff(src, key):
 
 
 # --------------------------------------------------------------------------
+# Google usage meter: counts billable Google calls per month and stops at the
+# caps in config.json, so the app can't run past Google's free tier.
+# --------------------------------------------------------------------------
+
+# Google Maps Platform list prices (Essentials SKUs, checked Nov 2026). Each SKU has
+# its own free monthly allowance; there is no longer a $200 credit.
+GOOGLE_SKUS = OrderedDict([
+    ("weather", {"label": "Weather", "free": 10000, "per_1000": 0.15}),
+    ("routes", {"label": "Routes", "free": 10000, "per_1000": 5.00}),
+    ("maps_js", {"label": "Map loads", "free": 10000, "per_1000": 7.00}),
+])
+
+
+def _pacific_offset_h(ts):
+    """UTC offset of US Pacific time at ts: -7 from the 2nd Sunday of March to the 1st Sunday of November."""
+    y = datetime.fromtimestamp(ts, timezone.utc).year
+
+    def nth_sunday(month, n):
+        first = datetime(y, month, 1, tzinfo=timezone.utc)
+        return first.replace(day=1 + (6 - first.weekday()) % 7 + 7 * (n - 1))
+
+    start = nth_sunday(3, 2).replace(hour=10).timestamp()  # 2 AM PST
+    end = nth_sunday(11, 1).replace(hour=9).timestamp()    # 2 AM PDT
+    return -7 if start <= ts < end else -8
+
+
+def pacific(ts):
+    """Naive datetime of ts on the US Pacific wall clock."""
+    return datetime.fromtimestamp(ts + _pacific_offset_h(ts) * 3600, timezone.utc).replace(tzinfo=None)
+
+
+def _from_pacific(dt):
+    guess = dt.replace(tzinfo=timezone.utc).timestamp() + 8 * 3600
+    return dt.replace(tzinfo=timezone.utc).timestamp() - _pacific_offset_h(guess) * 3600
+
+
+def next_pacific_midnight(ts):
+    d = pacific(ts).date()
+    return _from_pacific(datetime.fromordinal(d.toordinal() + 1))
+
+
+def next_pacific_month(ts):
+    p = pacific(ts)
+    return _from_pacific(datetime(p.year + (p.month == 12), p.month % 12 + 1, 1))
+
+
+class UsageMeter:
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+        self.month, self.counts = None, {}
+        self.pauses = {}  # sku -> (until_ts, message), after Google says a quota is used up
+        try:
+            saved = _load_json(path)
+            self.month, self.counts = saved.get("month"), dict(saved.get("counts") or {})
+        except (OSError, ValueError):
+            pass
+        self._roll()
+
+    def _roll(self):
+        m = pacific(time.time()).strftime("%Y-%m")
+        if m != self.month:
+            self.month, self.counts = m, {}
+
+    def cap(self, sku):
+        return int(CONFIG.get("google_monthly_caps", {}).get(sku, 0) or 0)
+
+    def _blocked(self, sku):
+        """-> (message, seconds until it clears) or None. Call with the lock held."""
+        self._roll()
+        now = time.time()
+        p = self.pauses.get(sku)
+        if p and p[0] > now:
+            return p[1], p[0] - now
+        used, cap = self.counts.get(sku, 0), self.cap(sku)
+        if used >= cap:
+            resume = next_pacific_month(now)
+            return ("monthly limit reached (%s of %s calls); resumes %s" % (
+                "{:,}".format(used), "{:,}".format(cap), pacific(resume).strftime("%b %d").replace(" 0", " ")),
+                resume - now)
+        return None
+
+    def blocked(self, sku):
+        with self.lock:
+            return self._blocked(sku)
+
+    def add(self, sku, n=1):
+        with self.lock:
+            self._roll()
+            self.counts[sku] = self.counts.get(sku, 0) + n
+            tmp = self.path + ".tmp"
+            try:
+                os.makedirs(os.path.dirname(self.path), exist_ok=True)
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump({"month": self.month, "counts": self.counts}, f)
+                os.replace(tmp, self.path)
+            except OSError as e:
+                log("  ! could not save Google usage: %s" % e)
+
+    def quota_hit(self, sku, msg):
+        """Google answered 429: wait out a daily quota until midnight Pacific, a rate limit for a minute."""
+        now = time.time()
+        if "per day" in msg.lower():
+            until = next_pacific_midnight(now)
+            note = "Google's daily quota is used up; resumes at midnight Pacific"
+        else:
+            until, note = now + 60, "Google rate limit; retrying in a minute"
+        with self.lock:
+            self.pauses[sku] = (until, note)
+        log("  ! google %s: %s" % (sku, note))
+
+    def snapshot(self):
+        with self.lock:
+            self._roll()
+            skus, total = [], 0.0
+            for sku, info in GOOGLE_SKUS.items():
+                used = self.counts.get(sku, 0)
+                cost = max(0, used - info["free"]) * info["per_1000"] / 1000.0
+                total += cost
+                b = self._blocked(sku)
+                skus.append({"id": sku, "label": info["label"], "used": used, "cap": self.cap(sku),
+                             "free": info["free"], "cost": round(cost, 2), "blocked": b[0] if b else None})
+            return {"month": self.month, "resets": next_pacific_month(time.time()),
+                    "est_cost": round(total, 2), "skus": skus}
+
+
+METER = UsageMeter(os.path.join(CACHE_DIR, "google_usage.json"))
+
+
+def google_call(sku, fn):
+    """Run one billable Google request through the meter. Raises FetchError when capped or paused."""
+    b = METER.blocked(sku)
+    if b:
+        raise FetchError("Google %s paused: %s" % (GOOGLE_SKUS[sku]["label"], b[0]), retry_after=b[1])
+    try:
+        result = fn()
+    except FetchError as e:
+        if e.status == 429:
+            METER.quota_hit(sku, str(e))
+            b = METER.blocked(sku)
+            e.retry_after = b[1] if b else None
+        elif e.status is not None:
+            METER.add(sku)  # Google answered; count it so the meter errs on the high side
+        raise
+    METER.add(sku)
+    return result
+
+
+# --------------------------------------------------------------------------
 # HTTP with polite spacing
 # --------------------------------------------------------------------------
 
 class FetchError(Exception):
-    def __init__(self, msg, status=None):
+    def __init__(self, msg, status=None, retry_after=None):
         super().__init__(msg)
         self.status = status
+        self.retry_after = retry_after  # seconds to back off, when the error says how long
 
 
 def user_agent():
@@ -414,8 +568,10 @@ def _route_google(wps, use_address):
         "X-Goog-FieldMask": "routes.distanceMeters,routes.polyline.encodedPolyline,"
                             "routes.legs.distanceMeters,routes.legs.startLocation,routes.legs.endLocation",
     }
-    THROTTLE["google_routes"].wait()
-    data, _ = http_request("https://routes.googleapis.com/directions/v2:computeRoutes", "POST", headers, body)
+    def call():
+        THROTTLE["google_routes"].wait()
+        return http_request("https://routes.googleapis.com/directions/v2:computeRoutes", "POST", headers, body)
+    data, _ = google_call("routes", call)
     routes = data.get("routes") or []
     if not routes:
         raise FetchError("Google Routes returned no route")
@@ -491,7 +647,7 @@ def compute_route(wps):
             log("route via %s (%d pts, %.0f mi)" % (ns, len(data["points"]), data["total_m"] / M_PER_MI))
             return data, errors
         except FetchError as ex:
-            set_backoff(ns, base, str(ex), 600)
+            set_backoff(ns, base, str(ex), ex.retry_after or 600)
             errors.append(str(ex))
         except (KeyError, IndexError, TypeError, ValueError) as ex:
             set_backoff(ns, base, "unexpected routing response: %r" % ex, 600)
@@ -772,7 +928,7 @@ SOURCE_LABELS = OrderedDict([
 MODEL_LABELS = {
     "gfs_seamless": "NOAA GFS/HRRR", "ecmwf_ifs025": "ECMWF IFS", "ecmwf_ifs": "ECMWF IFS",
     "gem_seamless": "Canada GEM", "icon_seamless": "DWD ICON", "ncep_nbm_conus": "NOAA NBM",
-    "ecmwf_aifs025_single": "ECMWF AIFS", "gfs_graphcast025": "GraphCast",
+    "ecmwf_aifs025_single": "ECMWF AIFS", "gfs_graphcast025": "GraphCast", "ukmo_seamless": "UK Met Office",
 }
 BAD_MODELS = set()
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
@@ -1115,9 +1271,12 @@ def fetch_google_weather(batch):
                           "location.longitude": "%.4f" % p["lon"], "hours": hours_needed, "pageSize": 24}
                 if token:
                     params["pageToken"] = token
-                THROTTLE["google_weather"].wait()
-                data, _ = http_request("https://weather.googleapis.com/v1/forecast/hours:lookup?" +
-                                       urllib.parse.urlencode(params))
+                url = "https://weather.googleapis.com/v1/forecast/hours:lookup?" + urllib.parse.urlencode(params)
+
+                def call(url=url):
+                    THROTTLE["google_weather"].wait()
+                    return http_request(url)
+                data, _ = google_call("weather", call)  # every page is a billable call
                 fh = data.get("forecastHours") or []
                 entries.extend(fh)
                 token = data.get("nextPageToken")
@@ -1128,7 +1287,7 @@ def fetch_google_weather(batch):
                 if last and parse_iso(last) > WINDOW_END:
                     break
         except FetchError as e:
-            set_backoff("google_weather", lk, str(e))
+            set_backoff("google_weather", lk, str(e), e.retry_after)
             continue
         CACHE.put("google_weather", lk, {"ok": True, "fetched": now, "expires": now + ttl("google_weather"),
                                          "data": {"members": parse_google_weather(entries)}})
@@ -1392,7 +1551,13 @@ def weather_for_plan(plan, enqueue=True):
             status[src]["error_msg"] = LAST_ERROR.get(src)
     if "open_meteo" in status and BAD_MODELS:
         status["open_meteo"]["note"] = "skipped models: " + ", ".join(sorted(BAD_MODELS))
-    return weather, {"queued": queued_total, "sources": status}
+    if "google_weather" in status:
+        b = METER.blocked("weather")
+        status["google_weather"]["paused"] = b[0] if b else None
+    out = {"queued": queued_total, "sources": status}
+    if google_key():
+        out["google"] = METER.snapshot()
+    return weather, out
 
 
 # --------------------------------------------------------------------------
@@ -1421,9 +1586,20 @@ def api_config():
     default_focus = TRIP.get("default_focus")
     if default_focus not in ROUTES:
         default_focus = next(iter(ROUTES))
+    # Each page load loads the Google map once (a billable "Dynamic Maps" load). Past the cap the
+    # page gets no key, and Google shows its free development-watermark map instead.
+    map_key, maps_paused = google_key(), None
+    if map_key:
+        b = METER.blocked("maps_js")
+        if b:
+            map_key, maps_paused = "", b[0]
+        else:
+            METER.add("maps_js")
     return {
         "title": TRIP.get("title", "Route weather"), "subtitle": TRIP.get("subtitle", ""),
-        "google_maps_api_key": google_key(),
+        "google_maps_api_key": map_key,
+        "maps_paused": maps_paused,
+        "google": METER.snapshot() if google_key() else None,
         "routes": routes,
         "sources": [{"id": s, "label": SOURCE_LABELS[s], "enabled": source_enabled(s)} for s in SOURCE_LABELS],
         "models": [MODEL_LABELS.get(m, m) for m in active_models()],
@@ -1524,6 +1700,11 @@ def main():
     print("\n  Move Route Weather is running at %s  (Ctrl+C to stop)\n" % url)
     print("  Google key: %s" % ("set" if google_key() else "not set (map shows Google's development watermark)"))
     print("  Weather sources: %s" % ", ".join(SOURCE_LABELS[s] for s in SOURCE_LABELS if source_enabled(s)))
+    if google_key():
+        snap = METER.snapshot()
+        print("  Google calls this month: %s  (est. charge $%.2f)" % (", ".join(
+            "%s %s/%s" % (s["label"].lower(), "{:,}".format(s["used"]), "{:,}".format(s["cap"]))
+            for s in snap["skus"]), snap["est_cost"]))
     print("  Cache folder: %s\n" % CACHE_DIR)
     if CONFIG.get("open_browser", True) and "--no-browser" not in sys.argv:
         try:

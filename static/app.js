@@ -11,6 +11,8 @@ const state = {
   focus: null,
   portland: false,
   layers: { wind: true, rain: true, snow: true, temp: true },
+  // open panes; closed = collapsed sidebar sections; sideW / pfH = dragged sizes in px (null = default)
+  ui: { side: true, profile: true, closed: [], sideW: null, pfH: null },
   plans: new Map(),      // "r1|0" -> plan from /api/plan
   loading: new Set(),
   map: null, gm: null, overlay: null, info: null,
@@ -87,13 +89,14 @@ function loadPrefs() {
     if (p.focus && routeMeta(p.focus)) state.focus = p.focus;
     if (typeof p.portland === 'boolean') state.portland = p.portland;
     if (p.layers) Object.assign(state.layers, p.layers);
+    if (p.ui) Object.assign(state.ui, p.ui);
     return state.visible.size > 0;
   } catch (e) { return false; }
 }
 function savePrefs() {
   try {
     localStorage.setItem('move-weather-prefs-v2', JSON.stringify({
-      visible: [...state.visible], focus: state.focus, portland: state.portland, layers: state.layers,
+      visible: [...state.visible], focus: state.focus, portland: state.portland, layers: state.layers, ui: state.ui,
     }));
   } catch (e) { /* storage unavailable: fine */ }
 }
@@ -211,7 +214,8 @@ function loadGoogle(key) {
 
 async function initMap() {
   const key = state.cfg.google_maps_api_key;
-  if (!key) mapNotice('No Google Maps key yet — add your demo key to config.json. Until then Google shows a "for development purposes only" map.');
+  if (state.cfg.maps_paused) mapNotice(`Google map loads ${state.cfg.maps_paused}, so this is Google's free "for development purposes only" map.`);
+  else if (!key) mapNotice('No Google Maps key yet — add your demo key to config.json. Until then Google shows a "for development purposes only" map.');
   try {
     await loadGoogle(key);
   } catch (e) {
@@ -553,6 +557,98 @@ function renderLegend() {
 }
 
 // ---------------------------------------------------------------------------
+// Collapsible panes (side panel, chart, sidebar sections)
+// ---------------------------------------------------------------------------
+const CHEV = '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>';
+
+const SIDE_W = 372;
+const clampSide = (w) => Math.round(Math.max(280, Math.min(w, 720, window.innerWidth - 320)));
+// state.pfMin (set by renderProfile) = smallest pane height at which the whole chart still fits
+const clampPf = (h) => Math.round(Math.max(state.pfMin || 110, Math.min(h, $('.main').clientHeight - 160)));
+
+function applySizes() {
+  const { sideW, pfH } = state.ui;
+  $('#app').style.setProperty('--side-w', `${sideW ? clampSide(sideW) : SIDE_W}px`);
+  const sized = !!pfH && state.ui.profile;
+  const pw = $('#profile-wrap');
+  pw.classList.toggle('is-sized', sized);
+  pw.style.height = sized ? `${clampPf(pfH)}px` : '';
+}
+
+// Drag (or arrow keys) to resize; double-click resets to the default size.
+function makeSplitter(el, axis, get, set) {
+  const move = (v) => { set(v); applySizes(); };
+  const done = () => { savePrefs(); renderProfile(); };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    document.body.classList.add('is-resizing', `is-resizing-${axis}`);
+    const onMove = (ev) => move(axis === 'x' ? ev.clientX : $('.main').getBoundingClientRect().bottom - ev.clientY);
+    const onUp = () => {
+      el.removeEventListener('pointermove', onMove);
+      document.body.classList.remove('is-resizing', `is-resizing-${axis}`);
+      done();
+    };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp, { once: true });
+    el.addEventListener('pointercancel', onUp, { once: true });
+  });
+  el.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 64 : 16;
+    const d = { ArrowRight: step, ArrowLeft: -step, ArrowUp: step, ArrowDown: -step }[e.key];
+    if (d == null) return;
+    e.preventDefault();
+    move(get() + d); done();
+  });
+  el.addEventListener('dblclick', () => { set(null); applySizes(); done(); });
+}
+
+function applyPanes() {
+  const { side, profile, closed } = state.ui;
+  $('#app').classList.toggle('side-collapsed', !side);
+  const st = $('#side-toggle');
+  const sideLabel = side ? 'Hide side panel' : 'Show side panel';
+  st.setAttribute('aria-expanded', side); st.setAttribute('aria-label', sideLabel); st.title = sideLabel;
+  $('#profile-wrap').classList.toggle('is-collapsed', !profile);
+  const pt = $('#pf-toggle');
+  pt.setAttribute('aria-expanded', profile);
+  pt.innerHTML = `${profile ? 'Hide chart' : 'Show chart'}${CHEV}`;
+  document.querySelectorAll('.sec[data-sec]').forEach((sec) => {
+    const shut = closed.includes(sec.dataset.sec);
+    sec.classList.toggle('is-collapsed', shut);
+    sec.querySelector('.sec-toggle').setAttribute('aria-expanded', !shut);
+  });
+  applySizes();
+}
+
+function initPanes() {
+  $('#side-toggle').innerHTML = CHEV;
+  document.querySelectorAll('.sec-toggle').forEach((b) => b.insertAdjacentHTML('beforeend', CHEV));
+  $('#side-toggle').addEventListener('click', () => { state.ui.side = !state.ui.side; applyPanes(); savePrefs(); });
+  $('#pf-toggle').addEventListener('click', () => {
+    state.ui.profile = !state.ui.profile;
+    applyPanes(); savePrefs();
+    if (state.ui.profile) renderProfile();
+  });
+  document.querySelectorAll('.sec[data-sec]').forEach((sec) => {
+    sec.querySelector('.sec-toggle').addEventListener('click', () => {
+      const id = sec.dataset.sec;
+      const c = state.ui.closed;
+      state.ui.closed = c.includes(id) ? c.filter((x) => x !== id) : [...c, id];
+      applyPanes(); savePrefs();
+    });
+  });
+  makeSplitter($('#split-side'), 'x', () => $('#side').offsetWidth,
+    (v) => { state.ui.sideW = v == null ? null : clampSide(v); });
+  makeSplitter($('#split-pf'), 'y', () => $('#profile-wrap').offsetHeight,
+    (v) => { state.ui.pfH = v == null ? null : clampPf(v); });
+  applyPanes();
+  applySizes();
+  window.addEventListener('resize', applySizes);
+}
+
+// ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
 const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -753,7 +849,7 @@ function renderSources() {
     let detail = '';
     if (!src.enabled) {
       cls += ' off';
-      detail = src.id === 'google_weather' ? 'needs the Google key in config.json' : 'turned off in config.json';
+      detail = src.id === 'google_weather' && !state.cfg.google ? 'needs the Google key in config.local.json' : 'turned off in config.json';
     } else if (!st) {
       cls += ' loading';
       detail = 'waiting';
@@ -766,13 +862,36 @@ function renderSources() {
         if (st.error) { cls += ' error'; detail += ` · ${st.error} failed (${st.error_msg || 'error'})`; }
       }
       if (src.id === 'open_meteo') detail = `${state.cfg.models.join(', ')} — ${detail}`;
-      if (src.id === 'google_weather') detail += ' · stops and passes only';
+      if (src.id === 'google_weather') {
+        if (st.paused) { cls = 'src paused'; detail = `${st.paused} · showing the last forecast it gave`; }
+        else detail += ' · stops and passes only';
+      }
       if (st.note) detail += ` · ${st.note}`;
     }
     html += `<div class="${cls}"><span class="dot"></span><div>${esc(src.label)}<small>${esc(detail)}</small></div></div>`;
   }
   html += '<div class="src-foot">Forecasts are cached on this computer and only re-fetched once they\'re a couple of hours old.</div>';
+  html += googleUsageHtml((plan && plan.status && plan.status.google) || state.cfg.google);
   host.innerHTML = html;
+}
+
+// Billable Google calls this month vs the caps in config.json (the server stops at the cap).
+function googleUsageHtml(g) {
+  if (!g) return '';
+  const fmt = (n) => n.toLocaleString();
+  const month = new Date(`${g.month}-15T12:00:00Z`).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
+  const rows = g.skus.map((s) => {
+    const pct = s.cap ? Math.min(100, (s.used / s.cap) * 100) : 100;
+    const lvl = s.blocked ? 'full' : pct >= 80 ? 'high' : '';
+    return `<div class="gu-row${lvl ? ` is-${lvl}` : ''}"><span>${esc(s.label)}</span>`
+      + `<span class="gu-n">${fmt(s.used)} / ${fmt(s.cap)}</span>`
+      + `<span class="gu-bar" aria-hidden="true"><i style="width:${pct.toFixed(1)}%"></i></span>`
+      + (s.blocked ? `<small>${esc(s.blocked)}</small>` : '')
+      + '</div>';
+  }).join('');
+  const cost = g.est_cost > 0 ? `<b class="gu-cost">est. $${g.est_cost.toFixed(2)}</b>` : 'est. $0.00';
+  return `<div class="gu"><div class="gu-head"><span>Google calls · ${esc(month)}</span><span>${cost}</span></div>${rows}`
+    + '<div class="gu-foot">The app stops calling Google at each limit (set in config.json). Google gives 10,000 free calls a month for each.</div></div>';
 }
 
 function renderDataLine() {
@@ -810,13 +929,23 @@ function renderProfile() {
   const xmax = Math.max(...plan.days.map((d) => d.x1));
   const X = (x) => ml + (x / xmax) * (Wd - ml - mr);
 
-  // vertical layout depends on which layers are on
+  // vertical layout depends on which layers are on; when the chart pane has been
+  // resized, the temp/precip/wind rows stretch (k) to fill its height
+  const rowH = { temp: L.temp ? 54 : 0, precip: (L.rain || L.snow) ? 40 : 0, wind: L.wind ? 40 : 0 };
+  const flex = rowH.temp + rowH.precip + rowH.wind;
+  const fixed = 18 + (L.wind ? 26 : 0) + (rowH.temp ? 12 : 0) + (rowH.precip ? 12 : 0) + (rowH.wind ? 12 : 0) + 34;
+  const KMIN = 0.6;  // rows shorter than this crowd their axis labels
+  const pw = $('#profile-wrap');
+  state.pfMin = Math.ceil(pw.offsetHeight - host.clientHeight + fixed + KMIN * flex);
+  const sized = pw.classList.contains('is-sized');
+  if (sized && pw.offsetHeight < state.pfMin) pw.style.height = `${state.pfMin}px`;  // e.g. a layer was turned on
+  const k = sized && flex ? Math.max(KMIN, Math.min(5, (host.clientHeight - fixed) / flex)) : 1;
   let y = 18;
   const P = {};
   if (L.wind) { P.arrows = [y, y + 22]; y += 26; }
-  if (L.temp) { P.temp = [y + 4, y + 58]; y += 66; }
-  if (L.rain || L.snow) { P.precip = [y + 4, y + 44]; y += 52; }
-  if (L.wind) { P.wind = [y + 4, y + 44]; y += 52; }
+  if (L.temp) { const h = rowH.temp * k; P.temp = [y + 4, y + 4 + h]; y += h + 12; }
+  if (L.rain || L.snow) { const h = rowH.precip * k; P.precip = [y + 4, y + 4 + h]; y += h + 12; }
+  if (L.wind) { const h = rowH.wind * k; P.wind = [y + 4, y + 4 + h]; y += h + 12; }
   const axisY = y + 4;
   const H = axisY + 30;
   const out = [];
@@ -832,7 +961,7 @@ function renderProfile() {
     if (i < plan.days.length - 1) {
       const nx0 = x1; const nx1 = X(plan.days[i + 1].x0);
       out.push(`<rect x="${nx0}" y="0" width="${nx1 - nx0}" height="${axisY}" fill="#e9ece8"/>`);
-      if (nx1 - nx0 > 10) out.push(`<text transform="translate(${(nx0 + nx1) / 2 + 3},${axisY / 2}) rotate(-90)" text-anchor="middle" font-size="9.5" fill="#7b8692" letter-spacing=".08em">NIGHT</text>`);
+      if (nx1 - nx0 > 10) out.push(`<text transform="translate(${(nx0 + nx1) / 2 + 3},${axisY / 2}) rotate(-90)" text-anchor="middle" font-size="9.5" fill="#65707c" letter-spacing=".08em">NIGHT</text>`);
     }
   });
 
@@ -861,7 +990,7 @@ function renderProfile() {
       const len = Math.min(20, 8 + w.w * 0.45); const col = windColor(w.w);
       out.push(`<g transform="translate(${x},${cy}) rotate(${(w.d + 180) % 360})"><line x1="0" y1="${len / 2}" x2="0" y2="${-len / 2 + 4}" stroke="${col}" stroke-width="2.4" stroke-linecap="round"/><path d="M0 ${-len / 2 - 1.5} L-4 ${-len / 2 + 5} L4 ${-len / 2 + 5} Z" fill="${col}"/></g>`);
     });
-    out.push(`<text x="${ml - 6}" y="${cy + 4}" text-anchor="end" font-size="10" fill="#7b8692">wind</text>`);
+    out.push(`<text x="${ml - 6}" y="${cy + 4}" text-anchor="end" font-size="10" fill="#65707c">wind</text>`);
   }
 
   if (P.temp) {
@@ -872,8 +1001,8 @@ function renderProfile() {
     const Y = (v) => t + ((hi - v) / (hi - lo)) * (b - t);
     out.push(`<line x1="${ml}" x2="${Wd - mr}" y1="${Y(32)}" y2="${Y(32)}" stroke="#3b82f6" stroke-dasharray="4 3" stroke-width="1"/>`);
     out.push(`<text x="${Wd - mr + 4}" y="${Y(32) + 3.5}" font-size="10" fill="#3b82f6">32°</text>`);
-    out.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="#7b8692">${hi}°</text>`);
-    out.push(`<text x="${ml - 6}" y="${b}" text-anchor="end" font-size="10" fill="#7b8692">${lo}°</text>`);
+    out.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="#65707c">${hi}°</text>`);
+    out.push(`<text x="${ml - 6}" y="${b}" text-anchor="end" font-size="10" fill="#65707c">${lo}°</text>`);
     out.push(`<text x="${ml - 6}" y="${(t + b) / 2 + 4}" text-anchor="end" font-size="10" fill="#4a5662" font-weight="600">temp</text>`);
     for (const seg of segs) {
       const pts = seg.filter((i) => WX[i] && WX[i].t != null);
@@ -918,7 +1047,7 @@ function renderProfile() {
     out.push(`<line x1="${ml}" x2="${Wd - mr}" y1="${b}" y2="${b}" stroke="#cfd5cf"/>`);
     out.push(`<line x1="${ml}" x2="${Wd - mr}" y1="${Y(40)}" y2="${Y(40)}" stroke="#dc2626" stroke-dasharray="4 3" opacity=".6"/>`);
     out.push(`<text x="${Wd - mr + 4}" y="${Y(40) + 3.5}" font-size="10" fill="#dc2626">40</text>`);
-    out.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="#7b8692">${Math.round(wmax)}</text>`);
+    out.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="#65707c">${Math.round(wmax)}</text>`);
     out.push(`<text x="${ml - 6}" y="${b - 2}" text-anchor="end" font-size="10" fill="#4a5662" font-weight="600">mph</text>`);
     const bw = Math.max(2, Math.min(6, spacing * 0.5));
     S.forEach((s, i) => {
@@ -1072,14 +1201,23 @@ async function boot() {
   const pc = $('#portland');
   pc.checked = state.portland;
   pc.addEventListener('change', () => setPortland(pc.checked));
+  initPanes();
   renderLayers();
   renderLegend();
   renderAll();
   initMap();
+  // redraw the chart when its pane changes size (window resize, side panel or splitter moved)
+  // (once per animation frame, so the chart rescales live while a splitter is dragged)
+  let raf = 0; let last = '';
+  new ResizeObserver(([e]) => {
+    const w = Math.round(e.contentRect.width);
+    const sz = `${w}x${state.ui.pfH ? Math.round(e.contentRect.height) : 0}`;
+    if (!w || sz === last) return;
+    last = sz;
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderProfile(); });
+  }).observe($('#profile'));
   await ensurePlan(state.focus);
   for (const id of state.visible) if (id !== state.focus) ensurePlan(id);
-  let rt;
-  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(renderProfile, 150); });
 }
 
 boot();

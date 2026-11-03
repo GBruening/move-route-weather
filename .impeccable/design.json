@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-03T00:00:00Z",
+  "title": "Design System: Move Route Weather",
+  "extensions": {
+    "colorMeta": {
+      "accent-teal": { "role": "primary", "displayName": "Dispatch Teal", "canonical": "#0f766e", "tonalRamp": ["#042f2c", "#0a4a45", "#0f766e", "#14958b", "#2fb3a7", "#7fd3c9", "#c2ebe5", "#e6f4f1"] },
+      "rain-blue": { "role": "secondary", "displayName": "Rain Blue", "canonical": "#2563eb", "tonalRamp": ["#172554", "#1e3a8a", "#1d4ed8", "#2563eb", "#3b82f6", "#93c5fd", "#bfdbfe", "#e3edfd"] },
+      "snow-violet": { "role": "secondary", "displayName": "Snow Violet", "canonical": "#7c3aed", "tonalRamp": ["#2e1065", "#4c1d95", "#5b21b6", "#7c3aed", "#8b5cf6", "#c4b5fd", "#ddd6fe", "#efe7fe"] },
+      "warn-ember": { "role": "tertiary", "displayName": "Ember", "canonical": "#c2410c", "tonalRamp": ["#431407", "#7c2d12", "#9a3412", "#c2410c", "#ea580c", "#fdba74", "#fed7aa", "#fdecdf"] },
+      "bad-red": { "role": "tertiary", "displayName": "Alarm Red", "canonical": "#b91c1c", "tonalRamp": ["#450a0a", "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#f87171", "#fecaca", "#fde2e2"] },
+      "ok-green": { "role": "tertiary", "displayName": "Go Green", "canonical": "#15803d", "tonalRamp": ["#052e16", "#14532d", "#166534", "#15803d", "#16a34a", "#4ade80", "#bbf7d0", "#ecfdf3"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#18212b", "tonalRamp": ["#18212b", "#2d3843", "#4a5662", "#7b8692", "#a5b0bd", "#cfd5d0", "#e2e5e1", "#f4f5f2"] },
+      "ink-2": { "role": "neutral", "displayName": "Ink 2", "canonical": "#4a5662" },
+      "ink-3": { "role": "neutral", "displayName": "Ink 3", "canonical": "#7b8692" },
+      "line": { "role": "neutral", "displayName": "Hairline", "canonical": "#e2e5e1" },
+      "line-2": { "role": "neutral", "displayName": "Faint Hairline", "canonical": "#eef0ec" },
+      "bg-sage-paper": { "role": "neutral", "displayName": "Sage Paper", "canonical": "#f4f5f2" },
+      "panel": { "role": "neutral", "displayName": "Panel", "canonical": "#ffffff" },
+      "map-ground": { "role": "neutral", "displayName": "Map Ground", "canonical": "#e8ebe6" },
+      "night-ink": { "role": "neutral", "displayName": "Night Ink", "canonical": "#111827" },
+      "route-1-slate": { "role": "route", "displayName": "Route 1 Slate", "canonical": "#475569" },
+      "route-2-ochre": { "role": "route", "displayName": "Route 2 Ochre", "canonical": "#a16207" },
+      "route-3-teal": { "role": "route", "displayName": "Route 3 Teal", "canonical": "#0f766e" },
+      "wind-calm": { "role": "scale", "displayName": "Wind under 10 mph", "canonical": "#15803d" },
+      "wind-breezy": { "role": "scale", "displayName": "Wind 10–20 mph", "canonical": "#ca8a04" },
+      "wind-windy": { "role": "scale", "displayName": "Wind 20–30 mph", "canonical": "#ea580c" },
+      "wind-strong": { "role": "scale", "displayName": "Wind 30–40 mph", "canonical": "#dc2626" },
+      "wind-closure": { "role": "scale", "displayName": "Wind 40+ mph", "canonical": "#7f1d1d" }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "The single app title at the top of the sidebar." },
+      "title": { "displayName": "Title", "purpose": "Route names, day headings, info-window and chart titles." },
+      "body": { "displayName": "Body", "purpose": "Base text; sidebar content mostly 12.5–13.5px." },
+      "small": { "displayName": "Small", "purpose": "Notes, metadata, source details, captions." },
+      "label": { "displayName": "Label", "purpose": "Uppercase letter-spaced section headings." },
+      "micro": { "displayName": "Micro", "purpose": "Badges, est tags, stop-kind tags." }
+    },
+    "shadows": [
+      { "name": "map-overlay", "value": "0 2px 10px rgba(0,0,0,.07)", "purpose": "Legend and notices floating over the map." },
+      { "name": "floating-dark", "value": "0 4px 14px rgba(0,0,0,.2)", "purpose": "Chart tooltip." },
+      { "name": "toast", "value": "0 6px 20px rgba(0,0,0,.25)", "purpose": "Transient toast." },
+      { "name": "switch-knob", "value": "0 1px 2px rgba(0,0,0,.25)", "purpose": "Switch knob only." }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "0.15s ease", "purpose": "Border, ring, switch track and knob transitions." },
+      { "name": "spin", "value": "0.9s linear infinite", "purpose": "Loading spinner in the data line." },
+      { "name": "pulse", "value": "1.2s ease-in-out infinite", "purpose": "Map highlight ring linked from chart hover or watch list." }
+    ],
+    "breakpoints": [
+      { "name": "stack", "value": "900px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Route Card",
+      "kind": "card",
+      "refersTo": "route-card",
+      "description": "Selectable route summary with a route-colored left bar and stat chips.",
+      "html": "<button class=\"ds-route is-focus\" style=\"--rc:#475569\"><span class=\"ds-route-bar\"></span><span><span class=\"ds-route-name\"><b>Route 1</b> <span>I-80</span> <span class=\"ds-badge\">Current plan</span></span><span class=\"ds-route-meta\">3 days · 1,312 mi · nights Rock Springs, Baker City</span><span class=\"ds-route-stats\"><span class=\"ds-stat bad\">gust 47 mph</span><span class=\"ds-stat snow\">snow 2 cm</span><span class=\"ds-stat\">low 24°</span></span></span></button>",
+      "css": ".ds-route{display:grid;grid-template-columns:6px 1fr;gap:0 12px;border:1px solid var(--line,#e2e5e1);border-radius:10px;padding:10px 10px 10px 0;background:#fff;cursor:pointer;text-align:left;width:340px;font:14px/1.45 ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif;color:#18212b;transition:border-color .15s,box-shadow .15s}.ds-route:hover{border-color:#cfd4cf}.ds-route.is-focus{border-color:var(--rc);box-shadow:0 0 0 1px var(--rc) inset}.ds-route:focus-visible{outline:2px solid #0f766e;outline-offset:2px}.ds-route-bar{background:var(--rc);border-radius:0 4px 4px 0}.ds-route-name{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}.ds-route-name span{color:#4a5662;font-size:13px}.ds-route-meta{display:block;color:#7b8692;font-size:12px;margin-top:2px}.ds-route-stats{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.ds-badge{font-size:10.5px;font-weight:650;padding:1px 6px;border-radius:99px;background:#e6f4f1;color:#0f5f58!important}.ds-stat{font-size:11.5px;padding:1px 7px;border-radius:6px;background:#eef0ec;color:#4a5662;font-variant-numeric:tabular-nums}.ds-stat.bad{background:#fde2e2;color:#991b1b}.ds-stat.snow{background:#efe7fe;color:#5b21b6}"
+    },
+    {
+      "name": "Stat Chips",
+      "kind": "chip",
+      "refersTo": "stat-chip",
+      "description": "Tabular value chips; tinted only when a threshold is crossed.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-stat\">low 24°</span><span class=\"ds-stat warn\">gust 36 mph</span><span class=\"ds-stat bad\">gust 47 mph</span><span class=\"ds-stat rain\">rain 6 mm</span><span class=\"ds-stat snow\">snow 2 cm</span><span class=\"ds-est\">est</span></div>",
+      "css": ".ds-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-family:ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif}.ds-stat{font-size:11.5px;padding:1px 7px;border-radius:6px;background:#eef0ec;color:#4a5662;font-variant-numeric:tabular-nums}.ds-stat.warn{background:#fdecdf;color:#9a3412}.ds-stat.bad{background:#fde2e2;color:#991b1b}.ds-stat.rain{background:#e3edfd;color:#1e40af}.ds-stat.snow{background:#efe7fe;color:#5b21b6}.ds-est{font-size:10.5px;font-weight:650;color:#92400e;background:#fef3c7;padding:0 5px;border-radius:4px}"
+    },
+    {
+      "name": "Switch",
+      "kind": "input",
+      "refersTo": "switch-on",
+      "description": "Labeled toggle with an explanatory caption (e.g. Portland detour).",
+      "html": "<label class=\"ds-switch-row\"><input type=\"checkbox\" checked><span class=\"ds-switch\"></span><span><b>Portland detour</b><small>Columbia Gorge and I-5 instead of Snoqualmie.</small></span></label>",
+      "css": ".ds-switch-row{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;cursor:pointer;font-family:ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif;color:#18212b;width:320px}.ds-switch-row input{position:absolute;opacity:0;pointer-events:none}.ds-switch{width:34px;height:20px;border-radius:99px;background:#cfd5d0;position:relative;transition:background .15s;margin-top:1px}.ds-switch::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}.ds-switch-row input:checked+.ds-switch{background:#0f766e}.ds-switch-row input:checked+.ds-switch::after{transform:translateX(14px)}.ds-switch-row input:focus-visible+.ds-switch{outline:2px solid #0f766e;outline-offset:2px}.ds-switch-row b{display:block;font-size:13.5px}.ds-switch-row small{display:block;color:#7b8692;font-size:12px;line-height:1.35}"
+    },
+    {
+      "name": "Layer Toggle",
+      "kind": "button",
+      "refersTo": "layer-toggle",
+      "description": "Icon-over-label pressed/unpressed tile for map weather layers.",
+      "html": "<div class=\"ds-layers\"><button class=\"ds-layer\" aria-pressed=\"true\"><svg viewBox=\"0 0 26 22\"><g transform=\"translate(13 11) rotate(60)\"><line x1=\"0\" y1=\"8\" x2=\"0\" y2=\"-4\" stroke=\"#ea580c\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M0 -10 L-5 -2 L5 -2 Z\" fill=\"#ea580c\"/></g></svg>Wind</button><button class=\"ds-layer\" aria-pressed=\"false\"><svg viewBox=\"0 0 26 22\"><rect x=\"1\" y=\"4\" width=\"24\" height=\"14\" rx=\"7\" fill=\"#3b82f6\"/><text x=\"13\" y=\"14.5\" text-anchor=\"middle\" font-size=\"9\" font-weight=\"700\" fill=\"#fff\">31°</text></svg>Temp</button></div>",
+      "css": ".ds-layers{display:grid;grid-template-columns:repeat(2,80px);gap:6px;font-family:ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif}.ds-layer{border:1px solid #e2e5e1;border-radius:9px;background:#fff;padding:8px 4px 6px;display:grid;justify-items:center;gap:3px;cursor:pointer;font-size:12px;color:#4a5662;font-family:inherit}.ds-layer svg{width:26px;height:22px}.ds-layer[aria-pressed=true]{border-color:#9fb3ad;background:#f4f8f6;color:#18212b}.ds-layer[aria-pressed=false]{color:#7b8692}.ds-layer[aria-pressed=false] svg{opacity:.3}.ds-layer:hover{border-color:#cfd4cf}.ds-layer:focus-visible{outline:2px solid #0f766e;outline-offset:2px}"
+    },
+    {
+      "name": "Watch List Item",
+      "kind": "custom",
+      "refersTo": "watch-item",
+      "description": "Ranked hazard row with a severity dot; click focuses the map.",
+      "html": "<ul class=\"ds-watch\"><li class=\"high\"><span class=\"dot\"></span><span>Worst gust 47 mph near Arlington<small>Sat 4:10 PM MST · 4 of 4 sources</small></span></li><li class=\"low\"><span class=\"dot\"></span><span>Rain near freezing at Snoqualmie<small>Mon 11:40 AM PST · 34°F</small></span></li></ul>",
+      "css": ".ds-watch{list-style:none;margin:0;padding:0;display:grid;gap:6px;width:330px;font-family:ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif;color:#18212b}.ds-watch li{display:grid;grid-template-columns:8px 1fr;gap:10px;padding:8px 10px;border-radius:8px;background:#f7f8f6;cursor:pointer;font-size:13px}.ds-watch li:hover{background:#eff1ed}.ds-watch .dot{width:8px;height:8px;border-radius:50%;margin-top:6px;background:#7b8692}.ds-watch li.high .dot{background:#b91c1c}.ds-watch li.med .dot{background:#ea580c}.ds-watch li.low .dot{background:#ca8a04}.ds-watch small{display:block;color:#7b8692;font-size:12px}"
+    },
+    {
+      "name": "Icon Button (eye)",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "30px square hairline button for show/hide.",
+      "html": "<button class=\"ds-eye\" aria-label=\"Hide route\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg></button>",
+      "css": ".ds-eye{border:1px solid #e2e5e1;background:#fff;border-radius:8px;width:30px;height:30px;display:grid;place-items:center;cursor:pointer;color:#4a5662;padding:0}.ds-eye:hover{background:#eef0ec}.ds-eye:focus-visible{outline:2px solid #0f766e;outline-offset:2px}.ds-eye svg{width:16px;height:16px}"
+    },
+    {
+      "name": "Chart Tooltip",
+      "kind": "custom",
+      "refersTo": "tooltip",
+      "description": "Dark floating tooltip for the profile chart.",
+      "html": "<div class=\"ds-tip\"><b>Elk Mountain · Sat 3:52 PM</b>28°F · wind 31 mph <span class=\"muted\">gust 47</span><br><span class=\"s\">snow 0.4 cm</span> · <span class=\"r\">rain 0 mm</span></div>",
+      "css": ".ds-tip{background:#111827;color:#f8fafc;border-radius:8px;padding:7px 9px;font:12px/1.4 ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2);max-width:260px;font-variant-numeric:tabular-nums}.ds-tip b{display:block;font-size:12.5px}.ds-tip .muted{color:#a5b0bd}.ds-tip .r{color:#93c5fd}.ds-tip .s{color:#c4b5fd}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Dispatcher's Desk",
+    "overview": "A calm, precise planning console for one person deciding where and when a 26-ft truck should drive. The chrome is deliberately quiet: sage-tinted paper, white panels, hairline borders, small system type, tabular numbers. All the loudness is saved for the weather and the risk. When something on screen is red, violet or orange, it carries meaning: gusts near the closure line, snow at a pass, rain near freezing.\n\nThe map and the profile chart under it do the work. The 372px sidebar is a dispatcher's clipboard. It holds the route cards, the toggles, a ranked watch list, the itinerary with weather at each stop, and an honest account of which forecast sources answered. Density is high but never cramped: 12–14px text, 6–8px gaps, 20px gutters.\n\nUncertainty is shown, not hidden. Estimated stop times get an amber \"est\" tag. Approximate route lines get a warning note. The faint bars, the opacity that tracks how many sources agree, and the shaded temperature spread show where the sources disagree.",
+    "keyCharacteristics": [
+      "Quiet neutral chrome; color reserved for weather encodings, risk and route identity.",
+      "System sans throughout, tabular numerals for every time, temperature and speed.",
+      "Flat surfaces with hairline borders; soft shadows only on things floating over the map.",
+      "Small, uppercase, letter-spaced section labels; no large headings.",
+      "Every hazard encoding is paired with a number or label, never color alone."
+    ],
+    "rules": [
+      { "name": "The Weather Owns Color Rule", "body": "Hue on screen means weather, risk, or which route. Chrome stays neutral. Blue never decorates, because blue means rain.", "section": "colors" },
+      { "name": "The Paired Encoding Rule", "body": "Every color-coded value also shows a number, label or shape (mph value, \"est\" tag, S/H/F/★/▲ marker), so nothing depends on hue alone.", "section": "colors" },
+      { "name": "The Tabular Numbers Rule", "body": "Times, temperatures, speeds, mileages and tables always use tabular numerals, so columns line up when values change.", "section": "typography" },
+      { "name": "The No Big Type Rule", "body": "The largest type is 19px. Hierarchy comes from weight, case and ink level, not size.", "section": "typography" },
+      { "name": "The Float-Only Shadow Rule", "body": "A shadow means \"this is above the map or page.\" Panels and cards that sit in the layout never get one. The focused route card uses a 1px inset ring in its route color instead of lift.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep chrome neutral (ink, hairline, sage paper) and let weather, risk and route colors carry all hue.",
+      "Do use tabular numerals for every number that can change.",
+      "Do pair every color encoding with a value, label or glyph.",
+      "Do mark estimates and approximations visibly (amber \"est\" tag, warning note), never silently.",
+      "Do reserve shadows for elements floating over the map or page.",
+      "Do keep the 40 mph and 32°F reference lines; they are the decision thresholds."
+    ],
+    "donts": [
+      "Don't use rain blue, snow violet or the wind reds for decoration, buttons or branding.",
+      "Don't add type larger than the 19px title, or display fonts.",
+      "Don't add shadows to in-layout cards or panels; use the inset route-color ring for selection.",
+      "Don't reuse Dispatch Teal on anything that could read as Route 3's line."
+    ]
+  }
+}

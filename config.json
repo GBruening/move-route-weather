@@ -1,6 +1,6 @@
 {
   "_help": "Don't put your Google key here. Put it in config.local.json (copy config.local.example.json), which git ignores. Restart the server after editing.",
-  "google_maps_api_key": "AIzaSyATvW_v3baJYCQu2d7J26NDdzmJUfOiPIU",
+  "google_maps_api_key": "",
 
   "_help_contact": "Optional, also best set in config.local.json: an email or website for the User-Agent sent to weather.gov and MET Norway.",
   "contact": "",
@@ -8,12 +8,12 @@
   "port": 8000,
   "open_browser": true,
 
-  "_help_sources": "Turn individual weather sources on or off.",
+  "_help_sources": "Turn individual weather sources on or off. Google Weather is billable after 10,000 calls a month and the three free sources already cover the trip, so it is off; set it to true to use it (the monthly caps below still apply).",
   "sources": {
     "open_meteo": true,
     "nws": true,
     "met_no": true,
-    "google_weather": true
+    "google_weather": false
   },
   "use_google_routes": true,
 
@@ -25,5 +25,12 @@
     "google_weather": 360
   },
 
-  "open_meteo_models": ["gfs_seamless", "ecmwf_ifs025", "gem_seamless", "icon_seamless", "ncep_nbm_conus"]
+  "open_meteo_models": ["gfs_seamless", "ecmwf_ifs025", "gem_seamless", "icon_seamless", "ncep_nbm_conus", "ukmo_seamless"],
+
+  "_help_google_caps": "Most billable Google calls the app will make per calendar month (Pacific time), counted in cache/google_usage.json. Google gives 10,000 free per month for each; staying under that keeps the bill at $0. At a cap the app stops calling Google until the 1st (the map falls back to Google's watermarked dev map). 0 blocks that one entirely.",
+  "google_monthly_caps": {
+    "weather": 9000,
+    "routes": 1000,
+    "maps_js": 3000
+  }
 }

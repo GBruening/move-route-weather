@@ -7,59 +7,73 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="app">
-  <aside class="side">
+<div class="app" id="app">
+  <aside class="side" id="side">
     <header class="side-head">
       <h1 id="title">Route weather</h1>
       <p id="subtitle"></p>
       <p class="data-line" id="data-line">Loading…</p>
     </header>
 
-    <section class="sec">
-      <h2>Routes</h2>
-      <div id="routes" class="routes"></div>
-      <label class="switch-row">
-        <input type="checkbox" id="portland">
-        <span class="switch" aria-hidden="true"></span>
-        <span class="switch-text">
-          <b>Portland detour</b>
-          <small>Columbia Gorge and I-5 instead of Snoqualmie. Route 1 with the detour is the current plan (night 2 in Baker City). Route 3 through Montana has no Portland option.</small>
-        </span>
-      </label>
+    <section class="sec" data-sec="routes">
+      <h2><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="sec-routes">Routes</button></h2>
+      <div class="sec-body" id="sec-routes">
+        <div id="routes" class="routes"></div>
+        <label class="switch-row">
+          <input type="checkbox" id="portland">
+          <span class="switch" aria-hidden="true"></span>
+          <span class="switch-text">
+            <b>Portland detour</b>
+            <small>Columbia Gorge and I-5 instead of Snoqualmie. Route 1 with the detour is the current plan (night 2 in Baker City). Route 3 through Montana has no Portland option.</small>
+          </span>
+        </label>
+      </div>
     </section>
 
-    <section class="sec">
-      <h2>Weather layers</h2>
-      <div class="layers" id="layers"></div>
+    <section class="sec" data-sec="layers">
+      <h2><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="sec-layers">Weather layers</button></h2>
+      <div class="sec-body" id="sec-layers">
+        <div class="layers" id="layers"></div>
+      </div>
     </section>
 
-    <section class="sec">
-      <h2>Watch list <span class="h2-sub" id="watch-route"></span></h2>
-      <ul id="watch" class="watch"></ul>
+    <section class="sec" data-sec="watch">
+      <h2><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="sec-watch">Watch list <span class="h2-sub" id="watch-route"></span></button></h2>
+      <div class="sec-body" id="sec-watch">
+        <ul id="watch" class="watch"></ul>
+      </div>
     </section>
 
-    <section class="sec">
-      <h2>Itinerary <span class="h2-sub" id="itin-route"></span></h2>
-      <div id="itin" class="itin"></div>
+    <section class="sec" data-sec="itin">
+      <h2><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="sec-itin">Itinerary <span class="h2-sub" id="itin-route"></span></button></h2>
+      <div class="sec-body" id="sec-itin">
+        <div id="itin" class="itin"></div>
+      </div>
     </section>
 
-    <section class="sec">
-      <h2>Forecast sources</h2>
-      <div id="sources" class="sources"></div>
+    <section class="sec" data-sec="sources">
+      <h2><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="sec-sources">Forecast sources</button></h2>
+      <div class="sec-body" id="sec-sources">
+        <div id="sources" class="sources"></div>
+      </div>
     </section>
   </aside>
 
   <main class="main">
+    <div class="split split-side" id="split-side" role="separator" aria-orientation="vertical" aria-controls="side" aria-label="Resize side panel (double-click to reset)" tabindex="0"></div>
     <div class="map-wrap">
       <div id="map" class="map"></div>
+      <button type="button" class="side-handle" id="side-toggle" aria-controls="side" aria-expanded="true" aria-label="Hide side panel" title="Hide side panel"></button>
       <div id="map-notice" class="map-notice" hidden></div>
       <div id="legend" class="legend"></div>
     </div>
-    <div class="profile-wrap">
+    <div class="profile-wrap" id="profile-wrap">
+      <div class="split split-pf" id="split-pf" role="separator" aria-orientation="horizontal" aria-controls="profile" aria-label="Resize chart (double-click to reset)" tabindex="0"></div>
       <div class="profile-head">
         <span class="pf-swatch" id="pf-swatch"></span>
         <b id="pf-title">Weather along the route</b>
         <span id="pf-sub" class="pf-sub"></span>
+        <button type="button" class="ghost-btn pf-toggle" id="pf-toggle" aria-controls="profile" aria-expanded="true"></button>
       </div>
       <div id="profile" class="profile"></div>
       <div id="pf-tip" class="pf-tip" hidden></div>
