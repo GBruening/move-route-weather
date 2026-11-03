@@ -1,0 +1,5 @@
+{
+  "_help": "Copy this file to config.local.json and fill it in. config.local.json is ignored by git, so your key stays on this computer.",
+  "google_maps_api_key": "PASTE-YOUR-DEMO-KEY-HERE",
+  "contact": ""
+}

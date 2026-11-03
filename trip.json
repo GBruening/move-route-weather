@@ -1,0 +1,313 @@
+{
+  "title": "Golden → Bellingham move",
+  "subtitle": "Penske 26-ft diesel · Sat Nov 7 – Mon Nov 9, 2026",
+  "_notes": "Times are local with UTC offsets (MST = -07:00, PST = -08:00). Stops with an address are routed by address when Google routing is available; lat/lon is the fallback and the position used for weather if routing fails. Edit freely, then restart the server.",
+
+  "places": {
+    "golden":             {"name": "Golden, CO (start)",                     "short": "Golden",         "lat": 39.7555, "lon": -105.2211, "address": "Golden, CO 80401"},
+    "cheyenne_fj":        {"name": "Flying J, Cheyenne (I-25/I-80)",          "short": "Cheyenne",       "lat": 41.1050, "lon": -104.8550, "address": "2250 Etchepare Dr, Cheyenne, WY 82007"},
+    "sinclair_stinker":   {"name": "Stinker I-80 Travel Plaza, Sinclair (Exit 221)", "short": "Sinclair", "lat": 41.7790, "lon": -107.0960},
+    "rs_spark":           {"name": "Spark by Hilton Rock Springs",            "short": "Rock Springs",   "lat": 41.5905, "lon": -109.2530, "address": "2717 Dewar Dr, Rock Springs, WY 82901"},
+    "evanston_pilot":     {"name": "Pilot, Evanston (Exit 6)",                "short": "Evanston",       "lat": 41.2610, "lon": -110.9560, "address": "289 Bear River Dr, Evanston, WY 82930"},
+    "snowville_fj":       {"name": "Flying J, Snowville (I-84 Exit 7)",       "short": "Snowville",      "lat": 41.9650, "lon": -112.7110, "address": "90 S Stone Rd, Snowville, UT 84336"},
+    "jerome_fj":          {"name": "Flying J, Jerome (I-84/US-93)",           "short": "Jerome",         "lat": 42.6850, "lon": -114.4540, "address": "5350 US-93, Jerome, ID 83338"},
+    "ontario_loves":      {"name": "Love's, Ontario",                         "short": "Ontario",        "lat": 44.0270, "lon": -116.9460, "address": "1041 Washington Ave, Ontario, OR 97914"},
+    "ontario_bw":         {"name": "Best Western Inn & Suites, Ontario",      "short": "Ontario",        "lat": 44.0330, "lon": -116.9440, "address": "251 NE Goodfellow St, Ontario, OR 97914"},
+    "baker_loves":        {"name": "Love's, Baker City (Exit 304)",           "short": "Baker City",     "lat": 44.7860, "lon": -117.8180, "address": "200 Campbell St, Baker City, OR 97814"},
+    "baker_bw":           {"name": "Best Western Sunridge Inn, Baker City",   "short": "Baker City",     "lat": 44.7840, "lon": -117.8220, "address": "1 Sunridge Ln, Baker City, OR 97814"},
+    "hermiston_spaceage": {"name": "Space Age Fuel, Hermiston (Exit 182)",    "short": "Hermiston",      "lat": 45.7960, "lon": -119.3250, "address": "77522 OR-207, Hermiston, OR 97838"},
+    "ellensburg_loves":   {"name": "Love's, Ellensburg (Exit 109)",           "short": "Ellensburg",     "lat": 46.9785, "lon": -120.5470, "address": "1512 US-97, Ellensburg, WA 98926"},
+    "snoqualmie_pass":    {"name": "Snoqualmie Pass (I-90, 3,022 ft)",        "short": "Snoqualmie Pass","lat": 47.4245, "lon": -121.4137},
+    "pendleton_arrowhead":{"name": "Arrowhead Travel Plaza, Pendleton (Exit 216)", "short": "Pendleton", "lat": 45.6600, "lon": -118.6830, "address": "72485 OR-331, Pendleton, OR 97801"},
+    "biggs_pilot":        {"name": "Pilot, Biggs Junction (Exit 104)",        "short": "Biggs Jct",      "lat": 45.6680, "lon": -120.8340, "address": "91485 Biggs Rufus Hwy, Wasco, OR 97065"},
+    "troutdale_ta":       {"name": "TA Travel Center, Troutdale (Exit 17)",   "short": "Troutdale",      "lat": 45.5440, "lon": -122.4040, "address": "790 NW Frontage Rd, Troutdale, OR 97060"},
+    "napavine_loves":     {"name": "Love's, Napavine (I-5 Exit 72)",          "short": "Napavine",       "lat": 46.5790, "lon": -122.9070, "address": "1276 Rush Rd, Napavine, WA 98565"},
+    "bellingham":         {"name": "Bellingham, WA (arrive)",                 "short": "Bellingham",     "lat": 48.7519, "lon": -122.4787, "address": "Bellingham, WA"},
+    "greenriver_loves":   {"name": "Love's, Green River UT",                  "short": "Green River UT", "lat": 38.9940, "lon": -110.1330},
+    "greenriver_comfort": {"name": "Comfort Inn, Green River UT",             "short": "Green River UT", "lat": 38.9927, "lon": -110.1405},
+    "casper":             {"name": "Casper, WY (fuel + dinner)",              "short": "Casper",         "lat": 42.8570, "lon": -106.3190},
+    "buffalo":            {"name": "Buffalo, WY (overnight)",                 "short": "Buffalo",        "lat": 44.3480, "lon": -106.6990},
+    "billings":           {"name": "Billings, MT (fuel)",                     "short": "Billings",       "lat": 45.7650, "lon": -108.5450},
+    "bozeman":            {"name": "Bozeman, MT (lunch)",                     "short": "Bozeman",        "lat": 45.6950, "lon": -111.0420},
+    "butte":              {"name": "Butte, MT (break)",                       "short": "Butte",          "lat": 45.9820, "lon": -112.5060},
+    "missoula":           {"name": "Missoula, MT (overnight)",                "short": "Missoula",       "lat": 46.9050, "lon": -114.0500},
+    "post_falls":         {"name": "Post Falls, ID (fuel)",                   "short": "Post Falls",     "lat": 47.7090, "lon": -116.9510}
+  },
+
+  "days": {
+    "d1_i80": {
+      "label": "Sat Nov 7", "title": "Golden → Rock Springs",
+      "note": "Bail-out if I-80 closes: Laramie (~160 mi) or Rawlins (~265 mi). Last 2–3 hours after dark (sunset ~5 PM).",
+      "stops": [
+        {"place": "golden",           "depart": "2026-11-07T13:30:00-07:00", "kind": "start",     "note": "Full tank. Eat lunch before leaving. I-25 N to I-80."},
+        {"place": "cheyenne_fj",      "arrive": "2026-11-07T15:30:00-07:00", "depart": "2026-11-07T15:45:00-07:00", "kind": "break", "note": "Restroom. Recheck WYDOT wind closures before Laramie and Elk Mountain."},
+        {"place": "sinclair_stinker", "arrive": "2026-11-07T18:00:00-07:00", "depart": "2026-11-07T18:45:00-07:00", "kind": "fuel", "note": "Fuel + dinner (Pete Eats). Cheapest diesel on the route."},
+        {"place": "rs_spark",         "arrive": "2026-11-07T19:45:00-07:00", "kind": "overnight", "note": "Free truck parking listed; 24-hr front desk."}
+      ]
+    },
+    "d2_i80_ontario": {
+      "label": "Sun Nov 8", "title": "Rock Springs → Ontario",
+      "note": "Original Route 1 day 2.",
+      "stops": [
+        {"place": "rs_spark",       "depart": "2026-11-08T07:00:00-07:00", "kind": "start"},
+        {"place": "evanston_pilot", "arrive": "2026-11-08T08:45:00-07:00", "depart": "2026-11-08T09:05:00-07:00", "kind": "fuel", "note": "Fill to full — last Wyoming diesel."},
+        {"place": "snowville_fj",   "arrive": "2026-11-08T11:00:00-07:00", "depart": "2026-11-08T11:15:00-07:00", "kind": "break", "note": "Restroom and snack."},
+        {"place": "jerome_fj",      "arrive": "2026-11-08T13:15:00-07:00", "depart": "2026-11-08T14:00:00-07:00", "kind": "fuel", "note": "Fuel + lunch."},
+        {"place": "ontario_bw",     "arrive": "2026-11-08T17:00:00-07:00", "kind": "overnight", "note": "Truck/trailer parking listed; lot fills by late evening."}
+      ]
+    },
+    "d2_i80_baker": {
+      "label": "Sun Nov 8", "title": "Rock Springs → Baker City",
+      "note": "Clocks go back 1 hour just west of Ontario. Sunset in Baker City ~4:25 PM PT.",
+      "stops": [
+        {"place": "rs_spark",       "depart": "2026-11-08T06:30:00-07:00", "kind": "start", "note": "Breakfast from 6:00. Walk around the truck."},
+        {"place": "evanston_pilot", "arrive": "2026-11-08T08:15:00-07:00", "depart": "2026-11-08T08:35:00-07:00", "kind": "fuel", "note": "Fill to full — last Wyoming diesel. Tight lot; pull through to a diesel lane."},
+        {"place": "snowville_fj",   "arrive": "2026-11-08T10:30:00-07:00", "depart": "2026-11-08T10:45:00-07:00", "kind": "break", "note": "Restroom and snack. Small and busy."},
+        {"place": "jerome_fj",      "arrive": "2026-11-08T12:45:00-07:00", "depart": "2026-11-08T13:30:00-07:00", "kind": "fuel", "note": "Fuel + lunch, about 45 minutes."},
+        {"place": "ontario_loves",  "arrive": "2026-11-08T16:15:00-07:00", "depart": "2026-11-08T16:25:00-07:00", "kind": "break", "note": "Restroom only."},
+        {"place": "baker_loves",    "arrive": "2026-11-08T16:35:00-08:00", "depart": "2026-11-08T16:48:00-08:00", "kind": "fuel", "note": "Fill to full with Oregon diesel for Day 3."},
+        {"place": "baker_bw",       "arrive": "2026-11-08T16:50:00-08:00", "kind": "overnight", "note": "Overnight + dinner on site. Truck parking not listed — call ahead."}
+      ]
+    },
+    "d3_snoq_from_ontario": {
+      "label": "Mon Nov 9", "title": "Ontario → Bellingham via Snoqualmie",
+      "note": "Washington chain law: carry chains on Snoqualmie (Nov 1 – Apr 1).",
+      "stops": [
+        {"place": "ontario_bw",         "depart": "2026-11-09T06:30:00-07:00", "kind": "start"},
+        {"place": "hermiston_spaceage", "arrive": "2026-11-09T09:15:00-08:00", "depart": "2026-11-09T09:40:00-08:00", "kind": "fuel", "note": "Fill to full."},
+        {"place": "ellensburg_loves",   "arrive": "2026-11-09T11:45:00-08:00", "depart": "2026-11-09T12:30:00-08:00", "kind": "meal", "note": "Lunch and pass check (WSDOT). Cramped lot."},
+        {"place": "snoqualmie_pass",    "arrive": "2026-11-09T13:15:00-08:00", "depart": "2026-11-09T13:15:00-08:00", "kind": "pass", "via": false, "note": "Pass summit."},
+        {"place": "bellingham",         "arrive": "2026-11-09T15:30:00-08:00", "kind": "end", "note": "Via I-405 to skip downtown Seattle."}
+      ]
+    },
+    "d3_gorge_from_ontario": {
+      "label": "Mon Nov 9", "title": "Ontario → Bellingham via Portland",
+      "note": "Portland detour from an Ontario night (the superseded 13-hour version). Stop times are estimates built around the plan's ~6:30 PM arrival.",
+      "estimated": true,
+      "stops": [
+        {"place": "ontario_bw",          "depart": "2026-11-09T06:30:00-07:00", "kind": "start"},
+        {"place": "pendleton_arrowhead", "arrive": "2026-11-09T08:45:00-08:00", "depart": "2026-11-09T09:15:00-08:00", "kind": "fuel", "note": "Fuel after the Cabbage Hill descent."},
+        {"place": "biggs_pilot",         "arrive": "2026-11-09T11:00:00-08:00", "depart": "2026-11-09T11:40:00-08:00", "kind": "meal", "note": "Lunch. Park at the edge of the lot."},
+        {"place": "troutdale_ta",        "arrive": "2026-11-09T13:15:00-08:00", "depart": "2026-11-09T13:45:00-08:00", "kind": "fuel", "note": "Top off with Oregon diesel, then I-205 N."},
+        {"place": "napavine_loves",      "arrive": "2026-11-09T15:45:00-08:00", "depart": "2026-11-09T16:00:00-08:00", "kind": "break", "note": "Break only."},
+        {"place": "bellingham",          "arrive": "2026-11-09T18:30:00-08:00", "kind": "end"}
+      ]
+    },
+    "d3_gorge_from_baker": {
+      "label": "Mon Nov 9", "title": "Baker City → Bellingham via Portland",
+      "note": "Sunrise ~6:40 so the Blue Mountains are in daylight. Gorge can require chains in an ice storm (Troutdale–Hood River).",
+      "stops": [
+        {"place": "baker_bw",            "depart": "2026-11-09T06:30:00-08:00", "kind": "start", "note": "Check TripCheck for the Blue Mountains and the Gorge."},
+        {"place": "pendleton_arrowhead", "arrive": "2026-11-09T08:30:00-08:00", "depart": "2026-11-09T08:45:00-08:00", "kind": "break", "note": "Restroom after the Cabbage Hill descent. No fuel needed."},
+        {"place": "biggs_pilot",         "arrive": "2026-11-09T10:45:00-08:00", "depart": "2026-11-09T11:15:00-08:00", "kind": "meal", "note": "Early lunch. Busy — park at the edge of the lot."},
+        {"place": "troutdale_ta",        "arrive": "2026-11-09T13:00:00-08:00", "depart": "2026-11-09T13:30:00-08:00", "kind": "fuel", "note": "Fill to full (~33 gal) so no diesel is bought in Washington. Tight entry. Then I-205 N."},
+        {"place": "napavine_loves",      "arrive": "2026-11-09T14:45:00-08:00", "depart": "2026-11-09T15:00:00-08:00", "kind": "break", "note": "Break only."},
+        {"place": "bellingham",          "arrive": "2026-11-09T17:45:00-08:00", "kind": "end", "note": "I-405 N at Tukwila to skip downtown Seattle; Monday rush hour."}
+      ]
+    },
+    "d1_i70": {
+      "label": "Sat Nov 7", "title": "Golden → Green River, UT",
+      "note": "Route 2 stop times are estimates (the plan only names the stops). Eisenhower Tunnel ~11,150 ft and Vail Pass.",
+      "estimated": true,
+      "stops": [
+        {"place": "golden",             "depart": "2026-11-07T13:30:00-07:00", "kind": "start", "note": "I-70 west."},
+        {"place": "greenriver_loves",   "arrive": "2026-11-07T19:45:00-07:00", "depart": "2026-11-07T20:05:00-07:00", "kind": "fuel", "note": "Fuel."},
+        {"place": "greenriver_comfort", "arrive": "2026-11-07T20:10:00-07:00", "kind": "overnight"}
+      ]
+    },
+    "d2_i70_ontario": {
+      "label": "Sun Nov 8", "title": "Green River, UT → Ontario",
+      "note": "Route 2 stop times are estimates. US-6 over Soldier Summit, then I-15 north through the Wasatch Front.",
+      "estimated": true,
+      "stops": [
+        {"place": "greenriver_comfort", "depart": "2026-11-08T06:30:00-07:00", "kind": "start"},
+        {"via": [39.9297, -111.0782], "name": "Soldier Summit (US-6)"},
+        {"place": "snowville_fj",   "arrive": "2026-11-08T11:45:00-07:00", "depart": "2026-11-08T12:00:00-07:00", "kind": "break", "note": "Restroom and snack."},
+        {"place": "jerome_fj",      "arrive": "2026-11-08T13:55:00-07:00", "depart": "2026-11-08T14:40:00-07:00", "kind": "fuel", "note": "Fuel + lunch."},
+        {"place": "ontario_bw",     "arrive": "2026-11-08T17:30:00-07:00", "kind": "overnight"}
+      ]
+    },
+    "d1_i25_buffalo": {
+      "label": "Sat Nov 7", "title": "Golden → Buffalo, WY",
+      "note": "The Montana route was never planned in detail, so its overnight towns and stop times are estimates. I-25 north of Cheyenne (Chugwater, Wheatland) also gets WYDOT wind closures.",
+      "estimated": true,
+      "stops": [
+        {"place": "golden",      "depart": "2026-11-07T13:30:00-07:00", "kind": "start", "note": "I-25 N all the way to Buffalo."},
+        {"place": "cheyenne_fj", "arrive": "2026-11-07T15:30:00-07:00", "depart": "2026-11-07T15:45:00-07:00", "kind": "break", "note": "Restroom. Check WYDOT for I-25 wind closures."},
+        {"place": "casper",      "arrive": "2026-11-07T18:30:00-07:00", "depart": "2026-11-07T19:15:00-07:00", "kind": "fuel", "note": "Fuel + dinner. No specific stop chosen yet."},
+        {"place": "buffalo",     "arrive": "2026-11-07T21:00:00-07:00", "kind": "overnight", "note": "No hotel chosen yet; look near the I-25/I-90 junction for truck parking."}
+      ]
+    },
+    "d2_i90_missoula": {
+      "label": "Sun Nov 8", "title": "Buffalo → Missoula",
+      "note": "Estimated times. I-90 over Bozeman Pass (5,702 ft) and Homestake Pass (6,329 ft).",
+      "estimated": true,
+      "stops": [
+        {"place": "buffalo",  "depart": "2026-11-08T07:00:00-07:00", "kind": "start"},
+        {"place": "billings", "arrive": "2026-11-08T09:50:00-07:00", "depart": "2026-11-08T10:20:00-07:00", "kind": "fuel", "note": "Fuel. No specific stop chosen yet."},
+        {"place": "bozeman",  "arrive": "2026-11-08T12:40:00-07:00", "depart": "2026-11-08T13:25:00-07:00", "kind": "meal", "note": "Lunch."},
+        {"place": "butte",    "arrive": "2026-11-08T14:55:00-07:00", "depart": "2026-11-08T15:10:00-07:00", "kind": "break", "note": "Break after Homestake Pass."},
+        {"place": "missoula", "arrive": "2026-11-08T17:10:00-07:00", "kind": "overnight", "note": "No hotel chosen yet."}
+      ]
+    },
+    "d3_i90_from_missoula": {
+      "label": "Mon Nov 9", "title": "Missoula → Bellingham via Snoqualmie",
+      "note": "Estimated times. Clocks go back an hour at Lookout Pass (the Idaho line). Lookout and Fourth of July passes in Idaho, then Snoqualmie with Washington's chain rule.",
+      "estimated": true,
+      "stops": [
+        {"place": "missoula",         "depart": "2026-11-09T06:30:00-07:00", "kind": "start"},
+        {"place": "post_falls",       "arrive": "2026-11-09T08:10:00-08:00", "depart": "2026-11-09T08:40:00-08:00", "kind": "fuel", "note": "Fill to full with Idaho diesel before Washington."},
+        {"place": "ellensburg_loves", "arrive": "2026-11-09T12:00:00-08:00", "depart": "2026-11-09T12:45:00-08:00", "kind": "meal", "note": "Lunch and pass check (WSDOT). Cramped lot."},
+        {"place": "snoqualmie_pass",  "arrive": "2026-11-09T13:40:00-08:00", "depart": "2026-11-09T13:40:00-08:00", "kind": "pass", "via": false, "note": "Pass summit."},
+        {"place": "bellingham",       "arrive": "2026-11-09T16:10:00-08:00", "kind": "end"}
+      ]
+    }
+  },
+
+  "routes": [
+    {
+      "id": "r1", "name": "Route 1", "short": "I-80", "color": "#475569",
+      "badge": "Original plan", "badge_portland": "Current plan",
+      "description": "Original base plan. I-25 → I-80 → I-84 → I-82 → I-90 over Snoqualmie. Nights in Rock Springs and Ontario.",
+      "description_portland": "Current plan. I-80 → I-84 to Baker City, then the Columbia Gorge, I-205 and I-5. Nights in Rock Springs and Baker City.",
+      "days": ["d1_i80", "d2_i80_ontario", "d3_snoq_from_ontario"],
+      "portland_days": ["d1_i80", "d2_i80_baker", "d3_gorge_from_baker"]
+    },
+    {
+      "id": "r2", "name": "Route 2", "short": "I-70", "color": "#a16207",
+      "description": "Wind alternate. I-70 over Eisenhower and Vail → US-6 → I-15 → I-84. Nights in Green River UT and Ontario. Stop times estimated.",
+      "description_portland": "I-70 and US-6 to Ontario, then the Columbia Gorge, I-205 and I-5 instead of Snoqualmie. Stop times estimated.",
+      "days": ["d1_i70", "d2_i70_ontario", "d3_snoq_from_ontario"],
+      "portland_days": ["d1_i70", "d2_i70_ontario", "d3_gorge_from_ontario"]
+    },
+    {
+      "id": "r3", "name": "Route 3", "short": "Montana I-90", "color": "#0f766e",
+      "description": "I-25 north to Buffalo, then I-90 through Billings, Bozeman, Butte, Missoula and Spokane, over Snoqualmie. Higher and snowier; set aside early in planning, so stops and times are estimates. No Portland option.",
+      "days": ["d1_i25_buffalo", "d2_i90_missoula", "d3_i90_from_missoula"],
+      "portland": "never"
+    }
+  ],
+  "default_focus": "r1",
+  "default_portland": true,
+
+  "landmarks": [
+    {"name": "Chugwater (I-25 wind)",       "type": "pass", "lat": 41.7570, "lon": -104.8230},
+    {"name": "Wheatland (I-25 wind)",       "type": "pass", "lat": 42.0540, "lon": -104.9530},
+    {"name": "Glendo",                      "type": "town", "lat": 42.5030, "lon": -105.0250},
+    {"name": "Douglas",                     "type": "town", "lat": 42.7590, "lon": -105.3820},
+    {"name": "Glenrock",                    "type": "town", "lat": 42.8610, "lon": -105.8720},
+    {"name": "Kaycee",                      "type": "town", "lat": 43.7110, "lon": -106.6380},
+    {"name": "Sheridan",                    "type": "town", "lat": 44.7950, "lon": -106.9400},
+    {"name": "Ranchester",                  "type": "town", "lat": 44.9090, "lon": -107.1650},
+    {"name": "Crow Agency",                 "type": "town", "lat": 45.6020, "lon": -107.4610},
+    {"name": "Hardin",                      "type": "town", "lat": 45.7320, "lon": -107.6120},
+    {"name": "Laurel",                      "type": "town", "lat": 45.6700, "lon": -108.7700},
+    {"name": "Columbus",                    "type": "town", "lat": 45.6400, "lon": -109.2500},
+    {"name": "Big Timber",                  "type": "town", "lat": 45.8330, "lon": -109.9550},
+    {"name": "Livingston",                  "type": "town", "lat": 45.6600, "lon": -110.5600},
+    {"name": "Bozeman Pass (5,702 ft)",     "type": "pass", "lat": 45.6625, "lon": -110.8000},
+    {"name": "Belgrade",                    "type": "town", "lat": 45.7760, "lon": -111.1770},
+    {"name": "Three Forks",                 "type": "town", "lat": 45.8900, "lon": -111.5500},
+    {"name": "Whitehall",                   "type": "town", "lat": 45.8700, "lon": -112.1000},
+    {"name": "Homestake Pass (6,329 ft)",   "type": "pass", "lat": 45.9200, "lon": -112.4000},
+    {"name": "Deer Lodge",                  "type": "town", "lat": 46.4000, "lon": -112.7300},
+    {"name": "Drummond",                    "type": "town", "lat": 46.6670, "lon": -113.1470},
+    {"name": "Clinton",                     "type": "town", "lat": 46.7700, "lon": -113.7100},
+    {"name": "Alberton",                    "type": "town", "lat": 47.0000, "lon": -114.4800},
+    {"name": "Superior",                    "type": "town", "lat": 47.1900, "lon": -114.8900},
+    {"name": "St. Regis",                   "type": "town", "lat": 47.3000, "lon": -115.1000},
+    {"name": "Lookout Pass (4,710 ft)",     "type": "pass", "lat": 47.4569, "lon": -115.6967},
+    {"name": "Wallace",                     "type": "town", "lat": 47.4700, "lon": -115.9200},
+    {"name": "Kellogg",                     "type": "town", "lat": 47.5400, "lon": -116.1300},
+    {"name": "Fourth of July Pass",         "type": "pass", "lat": 47.5600, "lon": -116.5100},
+    {"name": "Coeur d'Alene",               "type": "town", "lat": 47.6900, "lon": -116.7800},
+    {"name": "Spokane (I-90)",              "type": "town", "lat": 47.6500, "lon": -117.4200},
+    {"name": "Sprague",                     "type": "town", "lat": 47.3000, "lon": -117.9800},
+    {"name": "Ritzville",                   "type": "town", "lat": 47.1270, "lon": -118.3790},
+    {"name": "Moses Lake",                  "type": "town", "lat": 47.1300, "lon": -119.2800},
+    {"name": "George",                      "type": "town", "lat": 47.0800, "lon": -119.8600},
+    {"name": "Vantage (Columbia River)",    "type": "town", "lat": 46.9480, "lon": -119.9850},
+    {"name": "Ryegrass Summit",             "type": "pass", "lat": 46.9300, "lon": -120.1300},
+    {"name": "Kittitas",                    "type": "town", "lat": 46.9800, "lon": -120.4200},
+    {"name": "Longmont (I-25)",             "type": "town", "lat": 40.1630, "lon": -104.9810},
+    {"name": "Fort Collins (I-25)",         "type": "town", "lat": 40.5250, "lon": -104.9960},
+    {"name": "Wellington, CO",              "type": "town", "lat": 40.7030, "lon": -104.9990},
+    {"name": "Sherman Summit (I-80, 8,640 ft)", "type": "pass", "lat": 41.2386, "lon": -105.4370},
+    {"name": "Laramie",                     "type": "town", "lat": 41.3000, "lon": -105.6150},
+    {"name": "Arlington (wind corridor)",   "type": "pass", "lat": 41.5940, "lon": -106.2100},
+    {"name": "Elk Mountain (wind corridor)","type": "pass", "lat": 41.6880, "lon": -106.4130},
+    {"name": "Rawlins",                     "type": "town", "lat": 41.7860, "lon": -107.2300},
+    {"name": "Wamsutter",                   "type": "town", "lat": 41.6705, "lon": -107.9790},
+    {"name": "Point of Rocks",              "type": "town", "lat": 41.6800, "lon": -108.7900},
+    {"name": "Green River, WY",             "type": "town", "lat": 41.5280, "lon": -109.4660},
+    {"name": "Little America",              "type": "town", "lat": 41.5420, "lon": -109.8600},
+    {"name": "Lyman",                       "type": "town", "lat": 41.3280, "lon": -110.2930},
+    {"name": "Echo Canyon",                 "type": "town", "lat": 40.9720, "lon": -111.4390},
+    {"name": "Morgan",                      "type": "town", "lat": 41.0360, "lon": -111.6770},
+    {"name": "Ogden",                       "type": "town", "lat": 41.2200, "lon": -112.0100},
+    {"name": "Brigham City",                "type": "town", "lat": 41.5100, "lon": -112.0150},
+    {"name": "Tremonton",                   "type": "town", "lat": 41.7110, "lon": -112.1650},
+    {"name": "Burley",                      "type": "town", "lat": 42.5550, "lon": -113.7920},
+    {"name": "Bliss",                       "type": "town", "lat": 42.9270, "lon": -114.9480},
+    {"name": "Mountain Home",               "type": "town", "lat": 43.1330, "lon": -115.6910},
+    {"name": "Boise (I-84)",                "type": "town", "lat": 43.5700, "lon": -116.2200},
+    {"name": "Caldwell",                    "type": "town", "lat": 43.6630, "lon": -116.6870},
+    {"name": "Farewell Bend",               "type": "town", "lat": 44.3040, "lon": -117.2220},
+    {"name": "Ladd Canyon",                 "type": "pass", "lat": 45.2100, "lon": -117.9700},
+    {"name": "La Grande",                   "type": "town", "lat": 45.3250, "lon": -118.0870},
+    {"name": "Meacham (Blue Mountains)",    "type": "pass", "lat": 45.5115, "lon": -118.4247},
+    {"name": "Deadman Pass / Cabbage Hill", "type": "pass", "lat": 45.6005, "lon": -118.5152},
+    {"name": "Stanfield",                   "type": "town", "lat": 45.7800, "lon": -119.2200},
+    {"name": "Umatilla",                    "type": "town", "lat": 45.9120, "lon": -119.3420},
+    {"name": "Kennewick (I-82)",            "type": "town", "lat": 46.1640, "lon": -119.1440},
+    {"name": "Prosser",                     "type": "town", "lat": 46.2070, "lon": -119.7690},
+    {"name": "Sunnyside",                   "type": "town", "lat": 46.3230, "lon": -120.0080},
+    {"name": "Yakima",                      "type": "town", "lat": 46.6020, "lon": -120.5050},
+    {"name": "Manastash Ridge (I-82)",      "type": "pass", "lat": 46.8450, "lon": -120.4480},
+    {"name": "Cle Elum",                    "type": "town", "lat": 47.1950, "lon": -120.9390},
+    {"name": "Easton (chain-up area)",      "type": "pass", "lat": 47.2370, "lon": -121.1790},
+    {"name": "Snoqualmie Pass (I-90, 3,022 ft)", "type": "pass", "lat": 47.4245, "lon": -121.4137},
+    {"name": "North Bend",                  "type": "town", "lat": 47.4950, "lon": -121.7870},
+    {"name": "Issaquah",                    "type": "town", "lat": 47.5300, "lon": -122.0330},
+    {"name": "Bellevue",                    "type": "town", "lat": 47.5900, "lon": -122.1850},
+    {"name": "Bothell",                     "type": "town", "lat": 47.7600, "lon": -122.1850},
+    {"name": "Lynnwood",                    "type": "town", "lat": 47.8200, "lon": -122.2700},
+    {"name": "Everett",                     "type": "town", "lat": 47.9790, "lon": -122.2020},
+    {"name": "Mount Vernon",                "type": "town", "lat": 48.4210, "lon": -122.3340},
+    {"name": "Arlington, OR",               "type": "town", "lat": 45.7200, "lon": -120.2010},
+    {"name": "The Dalles",                  "type": "town", "lat": 45.6000, "lon": -121.1870},
+    {"name": "Hood River (Gorge)",          "type": "pass", "lat": 45.7090, "lon": -121.5200},
+    {"name": "Cascade Locks (Gorge)",       "type": "pass", "lat": 45.6700, "lon": -121.8900},
+    {"name": "Vancouver, WA",               "type": "town", "lat": 45.6900, "lon": -122.6500},
+    {"name": "Woodland",                    "type": "town", "lat": 45.9040, "lon": -122.7440},
+    {"name": "Kelso / Longview",            "type": "town", "lat": 46.1460, "lon": -122.9080},
+    {"name": "Castle Rock",                 "type": "town", "lat": 46.2750, "lon": -122.9080},
+    {"name": "Centralia",                   "type": "town", "lat": 46.7160, "lon": -122.9540},
+    {"name": "Olympia",                     "type": "town", "lat": 47.0380, "lon": -122.9010},
+    {"name": "Tacoma",                      "type": "town", "lat": 47.2380, "lon": -122.4300},
+    {"name": "Federal Way",                 "type": "town", "lat": 47.3220, "lon": -122.3120},
+    {"name": "Tukwila (I-405)",             "type": "town", "lat": 47.4600, "lon": -122.2600},
+    {"name": "Renton",                      "type": "town", "lat": 47.4800, "lon": -122.2000},
+    {"name": "Idaho Springs",               "type": "town", "lat": 39.7420, "lon": -105.5130},
+    {"name": "Eisenhower Tunnel (11,150 ft)", "type": "pass", "lat": 39.6797, "lon": -105.9122},
+    {"name": "Silverthorne",                "type": "town", "lat": 39.6300, "lon": -106.0720},
+    {"name": "Vail Pass (10,662 ft)",       "type": "pass", "lat": 39.5307, "lon": -106.2167},
+    {"name": "Vail",                        "type": "town", "lat": 39.6430, "lon": -106.3780},
+    {"name": "Eagle",                       "type": "town", "lat": 39.6530, "lon": -106.8280},
+    {"name": "Glenwood Canyon",             "type": "pass", "lat": 39.6000, "lon": -107.1920},
+    {"name": "Glenwood Springs",            "type": "town", "lat": 39.5500, "lon": -107.3250},
+    {"name": "Rifle",                       "type": "town", "lat": 39.5300, "lon": -107.7830},
+    {"name": "Parachute",                   "type": "town", "lat": 39.4520, "lon": -108.0530},
+    {"name": "Grand Junction",              "type": "town", "lat": 39.0900, "lon": -108.6000},
+    {"name": "Fruita",                      "type": "town", "lat": 39.1590, "lon": -108.7290},
+    {"name": "Thompson Springs",            "type": "town", "lat": 38.9700, "lon": -109.7140},
+    {"name": "Wellington, UT",              "type": "town", "lat": 39.5430, "lon": -110.7350},
+    {"name": "Price",                       "type": "town", "lat": 39.5990, "lon": -110.8110},
+    {"name": "Soldier Summit (US-6)",       "type": "pass", "lat": 39.9297, "lon": -111.0782},
+    {"name": "Spanish Fork",                "type": "town", "lat": 40.1150, "lon": -111.6550},
+    {"name": "Provo / Orem (I-15)",         "type": "town", "lat": 40.2900, "lon": -111.7000},
+    {"name": "Lehi",                        "type": "town", "lat": 40.3920, "lon": -111.8510},
+    {"name": "Salt Lake City (I-15)",       "type": "town", "lat": 40.7600, "lon": -111.9030},
+    {"name": "Farmington",                  "type": "town", "lat": 40.9800, "lon": -111.8870}
+  ]
+}

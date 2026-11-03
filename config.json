@@ -1,0 +1,29 @@
+{
+  "_help": "Don't put your Google key here. Put it in config.local.json (copy config.local.example.json), which git ignores. Restart the server after editing.",
+  "google_maps_api_key": "AIzaSyATvW_v3baJYCQu2d7J26NDdzmJUfOiPIU",
+
+  "_help_contact": "Optional, also best set in config.local.json: an email or website for the User-Agent sent to weather.gov and MET Norway.",
+  "contact": "",
+
+  "port": 8000,
+  "open_browser": true,
+
+  "_help_sources": "Turn individual weather sources on or off.",
+  "sources": {
+    "open_meteo": true,
+    "nws": true,
+    "met_no": true,
+    "google_weather": true
+  },
+  "use_google_routes": true,
+
+  "_help_ttl": "How long a fetched forecast is reused before it is fetched again (minutes). Forecast models update every 1–6 hours, so shorter is wasteful.",
+  "ttl_minutes": {
+    "open_meteo": 180,
+    "nws": 120,
+    "met_no": 120,
+    "google_weather": 360
+  },
+
+  "open_meteo_models": ["gfs_seamless", "ecmwf_ifs025", "gem_seamless", "icon_seamless", "ncep_nbm_conus"]
+}

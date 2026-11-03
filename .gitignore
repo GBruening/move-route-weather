@@ -1,0 +1,11 @@
+# Local settings (Google key) and fetched forecasts stay on this computer
+config.local.json
+cache/
+
+# Python / editor clutter
+__pycache__/
+*.pyc
+*.tmp
+.DS_Store
+Thumbs.db
+.vscode/

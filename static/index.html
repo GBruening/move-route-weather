@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Move Route Weather</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <header class="side-head">
+      <h1 id="title">Route weather</h1>
+      <p id="subtitle"></p>
+      <p class="data-line" id="data-line">Loading…</p>
+    </header>
+
+    <section class="sec">
+      <h2>Routes</h2>
+      <div id="routes" class="routes"></div>
+      <label class="switch-row">
+        <input type="checkbox" id="portland">
+        <span class="switch" aria-hidden="true"></span>
+        <span class="switch-text">
+          <b>Portland detour</b>
+          <small>Columbia Gorge and I-5 instead of Snoqualmie. Route 1 with the detour is the current plan (night 2 in Baker City). Route 3 through Montana has no Portland option.</small>
+        </span>
+      </label>
+    </section>
+
+    <section class="sec">
+      <h2>Weather layers</h2>
+      <div class="layers" id="layers"></div>
+    </section>
+
+    <section class="sec">
+      <h2>Watch list <span class="h2-sub" id="watch-route"></span></h2>
+      <ul id="watch" class="watch"></ul>
+    </section>
+
+    <section class="sec">
+      <h2>Itinerary <span class="h2-sub" id="itin-route"></span></h2>
+      <div id="itin" class="itin"></div>
+    </section>
+
+    <section class="sec">
+      <h2>Forecast sources</h2>
+      <div id="sources" class="sources"></div>
+    </section>
+  </aside>
+
+  <main class="main">
+    <div class="map-wrap">
+      <div id="map" class="map"></div>
+      <div id="map-notice" class="map-notice" hidden></div>
+      <div id="legend" class="legend"></div>
+    </div>
+    <div class="profile-wrap">
+      <div class="profile-head">
+        <span class="pf-swatch" id="pf-swatch"></span>
+        <b id="pf-title">Weather along the route</b>
+        <span id="pf-sub" class="pf-sub"></span>
+      </div>
+      <div id="profile" class="profile"></div>
+      <div id="pf-tip" class="pf-tip" hidden></div>
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
