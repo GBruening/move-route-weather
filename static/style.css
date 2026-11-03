@@ -275,7 +275,37 @@ button { font: inherit; color: inherit; }
 .profile-wrap.is-sized { display: flex; flex-direction: column; }
 .profile-wrap.is-sized .profile { flex: 1; min-height: 0; overflow: hidden; }
 .profile-wrap.is-collapsed { padding-bottom: 8px; }
-.profile-wrap.is-collapsed .profile { display: none; }
+.profile-wrap.is-collapsed .profile, .profile-wrap.is-collapsed .pf-nav { display: none; }
+
+/* overview strip: pick a day, or drag a window over part of the route */
+.pf-nav { display: grid; grid-template-columns: 46px minmax(0, 1fr) 46px; align-items: center; margin: 5px 0 3px; }
+.nav-all {
+  justify-self: start; height: 22px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--ink-2); font-size: 11px; font-weight: 600; cursor: pointer;
+  transition: background-color .15s, color .15s, border-color .15s;
+}
+.nav-all:hover { background: var(--line-2); }
+.nav-all[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.nav-all:focus-visible, .nav-day:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.nav-track { position: relative; height: 22px; cursor: crosshair; touch-action: none; user-select: none; }
+.nav-day {
+  position: absolute; top: 0; bottom: 0; padding: 0 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--line-2); text-align: left;
+  font-size: 11px; font-weight: 600; color: var(--ink-2); cursor: pointer; transition: background-color .15s, border-color .15s;
+}
+.nav-day span { font-weight: 400; color: var(--ink-3); margin-left: 3px; }
+.nav-day:hover { background: #e4e8e3; }
+.nav-day[aria-pressed="true"] { background: var(--panel); border-color: #b6bdb6; }
+.nav-shade { position: absolute; top: -1px; bottom: -1px; background: rgba(255, 255, 255, .68); pointer-events: none; }
+.nav-win { position: absolute; top: -3px; bottom: -3px; border: 2px solid var(--accent); border-radius: 6px; cursor: grab; }
+.nav-h { position: absolute; top: 0; bottom: 0; width: 12px; cursor: ew-resize; }
+.nav-h[data-side="l"] { left: -7px; }
+.nav-h[data-side="r"] { right: -7px; }
+.nav-h::after {
+  content: ""; position: absolute; top: 50%; left: 50%; width: 4px; height: 12px; border-radius: 2px;
+  background: var(--accent); box-shadow: 0 0 0 1.5px #fff; transform: translate(-50%, -50%);
+}
+.is-dragging-nav, .is-dragging-nav * { cursor: grabbing !important; user-select: none; }
 .profile-wrap.is-collapsed .pf-toggle .chev { transform: rotate(180deg); }
 .profile { width: 100%; min-height: 120px; }
 .profile svg { display: block; width: 100%; }

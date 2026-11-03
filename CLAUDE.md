@@ -81,6 +81,13 @@ Route-card badges come from `badge` / `badge_portland`; `portland` is `toggle` (
   shown while a refresh is queued. Errors back off 15 min (NWS 404s for a day). One background
   worker per source with throttles: Open-Meteo 1 s, NWS 0.4 s, MET 0.3 s, Google 0.15 s,
   Google Routes 0.5 s, OSRM 1.2 s.
+- **Rate limits**: on an HTTP 429 the source's worker waits (from `Retry-After`, or from the
+  message: one minute ≈ 65 s, hourly/daily until the reset) and retries the same points.
+  Waits over `RATE_WAIT_MAX` (5 min) back the points off instead, so they show the last
+  forecast. Open-Meteo is also paced by `CallBudget` against `open_meteo_budget`
+  (450/min, 4,000/h, 8,000/day of its weighted calls). A request is counted as
+  locations × max(1, variables × models / 10), and recent calls are saved to
+  `cache/open_meteo_calls.json`.
 - **Google usage meter** (`UsageMeter`, `google_call()`): every billable Google call (each
   Weather page, each Routes call, each page load that gets the map key from `/api/config`) is
   counted per calendar month in Pacific time, which is Google's billing month, in
@@ -97,7 +104,7 @@ Route-card badges come from `badge` / `badge_portland`; `portland` is `toggle` (
 
 - Map: Google Maps JS API loaded with the key (no key → Google's watermarked dev map).
   Weather is drawn by a custom `OverlayView` (`makeOverlayClass`) as SVG glyphs: wind arrow
-  (length and color = speed, dashed = gusts), blue rain bar, purple snow bar (faint bar = wettest
+  (starts at the point and points downwind; length and color = speed, dashed = gusts), blue rain bar, purple snow bar (faint bar = wettest
   source, opacity = agreement), temperature chip, stop markers (S/H/F/★, ▲ for passes).
   Glyphs closer than 30 px are hidden, focused route first.
 - Sidebar: route cards (eye = show/hide, click = focus), Portland toggle, layer toggles
@@ -105,6 +112,11 @@ Route-card badges come from `badge` / `badge_portland`; `portland` is `toggle` (
   itinerary with weather at each stop, source status.
 - Profile chart under the map: day bands, wind arrows, temperature with source spread, rain
   and snow bars, wind/gust with a 40 mph line; hover links to the map.
+- Overview strip above the chart (`renderNav`, `initNav`, `state.span`): click a day (click
+  it again, press Esc, or press All to go back), or drag across the strip to choose any
+  stretch. The window can be moved and its edges dragged. The chart then shows only that
+  stretch, with its scales rescaled and fuel stops, breaks, passes and towns named; the map
+  fits to it. The selection is cleared when the focused route changes.
 - Panes: drag splitters resize the sidebar and the chart (double-click resets). The sidebar,
   the chart and each sidebar section can also be collapsed. The state is saved in prefs `ui`.
 - Preferences are kept in `localStorage` key `move-weather-prefs-v2` (bump the key when

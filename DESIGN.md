@@ -247,6 +247,10 @@ Quiet and precise: small type, hairlines, tabular numbers, and color reserved fo
 - **Legend:** white at 95% opacity, 10px radius, overlay shadow, collapsible header.
 - **Info window:** 380px max. A heading with a route swatch, a three-up KPI tile row (#f6f7f5, 7px radius), and a compact right-aligned per-source table.
 
+### Overview Strip
+- A 22px strip between the chart header and the chart, aligned to the chart's 46px margins. It has an "All" button (filled Ink when the whole route shows) and one quiet button per day (Faint Hairline fill, 5px radius, bold day label plus Ink 3 title, truncated with an ellipsis).
+- The selection is a 2px Dispatch Teal window (6px radius) with small teal grips on both edges, and white 68% shades over everything outside it. Click a day, or drag to create, move or resize the window.
+
 ### Profile Chart (signature)
 - SVG strip under the map. Days are alternating white / #fafbf9 bands, with grey NIGHT bands labeled vertically. Rows: wind arrows; temperature line (#334155) over a shaded source-spread band, with a dashed 32° line; rain and snow bars; wind with gust dots and a dashed red 40 mph line. A dark vertical cursor and dark tooltip link the hover position to the map.
 

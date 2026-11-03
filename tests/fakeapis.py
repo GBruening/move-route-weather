@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 CALLS = []
 GOOGLE_WEATHER_429 = False  # set True to simulate Google's daily quota being used up
+RATE_LIMIT_ONCE = set()     # hosts that answer the next request with a 429 (Retry-After: 1 s)
 
 
 def enc_val(v):
@@ -216,6 +217,10 @@ def make_fake(server_mod, route_mode="google"):
         u = urllib.parse.urlsplit(url)
         q = urllib.parse.parse_qs(u.query)
         CALLS.append((u.netloc, u.path))
+        if u.netloc in RATE_LIMIT_ONCE:
+            RATE_LIMIT_ONCE.discard(u.netloc)
+            raise FetchError("HTTP 429 from %s Minutely API request limit exceeded. Please try again in one minute."
+                             % u.netloc, status=429, retry_after=1)
         status, data, hdrs = 200, None, {}
         if u.netloc == "routes.googleapis.com":
             if route_mode != "google":

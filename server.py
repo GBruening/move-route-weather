@@ -56,6 +56,9 @@ DEFAULT_CONFIG = {
     # Billable Google calls allowed per calendar month (Pacific time, like Google's billing month).
     # Kept under Google's free 10,000 per SKU so the bill stays $0; 0 blocks that SKU entirely.
     "google_monthly_caps": {"weather": 9000, "routes": 1000, "maps_js": 3000},
+    # Open-Meteo's free tier: 600 calls/minute, 5,000/hour, 10,000/day, where a request with more
+    # than 10 variables (counted here as variables x models) counts as several calls. Stay under them.
+    "open_meteo_budget": {"minute": 450, "hour": 4000, "day": 8000},
 }
 
 
@@ -478,7 +481,17 @@ def http_request(url, method="GET", headers=None, body=None, timeout=45):
             detail = raw.decode("utf-8", "replace")[:300]
         except Exception:
             pass
-        raise FetchError("HTTP %s from %s %s" % (e.code, host, detail.strip()), status=e.code)
+        retry = None
+        ra = e.headers.get("Retry-After") if e.headers else None
+        if ra:
+            try:
+                retry = float(ra)
+            except ValueError:
+                try:
+                    retry = max(0.0, email.utils.parsedate_to_datetime(ra).timestamp() - time.time())
+                except (TypeError, ValueError):
+                    pass
+        raise FetchError("HTTP %s from %s %s" % (e.code, host, detail.strip()), status=e.code, retry_after=retry)
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise FetchError("could not reach %s (%s)" % (host, e))
 
@@ -495,6 +508,95 @@ class Throttle:
             if delay > 0:
                 time.sleep(delay)
             self.last = time.monotonic()
+
+
+class CallBudget:
+    """Paces a service whose free tier caps (weighted) calls per minute, hour and day, like
+    Open-Meteo. take() sleeps until a call fits; if that would take longer than RATE_WAIT_MAX
+    it raises a 429-style FetchError, so the points keep their last forecast until then.
+    Recent calls are saved to disk so a restart can't burst past the limits."""
+
+    def __init__(self, name, limits, path=None):
+        self.name, self.limits, self.path = name, limits, path  # limits: [(window_seconds, max_weight)]
+        self.lock = threading.Lock()
+        self.calls = []  # [(ts, weight)], oldest first
+        try:
+            self.calls = [tuple(c) for c in _load_json(path)] if path else []
+        except (OSError, ValueError, TypeError):
+            pass
+
+    def _wait_for(self, weight, now):
+        wait = 0.0
+        for win, cap in self.limits:
+            recent = [(t, w) for t, w in self.calls if t > now - win]
+            over = sum(w for _, w in recent) + weight - cap
+            for t, w in recent:  # the oldest calls leave the window first
+                if over <= 0:
+                    break
+                over -= w
+                wait = max(wait, t + win - now)
+        return wait
+
+    def take(self, weight):
+        while True:
+            with self.lock:
+                now = time.time()
+                keep = max(win for win, _ in self.limits)
+                self.calls = [c for c in self.calls if c[0] > now - keep]
+                wait = self._wait_for(weight, now)
+                if wait <= 0:
+                    self.calls.append((now, weight))
+                    self._save()
+                    return
+            if wait > RATE_WAIT_MAX:
+                raise FetchError("%s free-tier budget used up; resumes in %d min" % (self.name, math.ceil(wait / 60)),
+                                 status=429, retry_after=wait)
+            log("  ~ %s: pacing to stay under the free limits, waiting %d s" % (self.name, math.ceil(wait)))
+            time.sleep(wait + 0.5)
+
+    def _save(self):
+        if not self.path:
+            return
+        try:
+            tmp = self.path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.calls, f)
+            os.replace(tmp, self.path)
+        except OSError:
+            pass
+
+
+# When a service answers 429 (too many requests), its worker waits and retries the same
+# points instead of marking them failed. Longer waits (hourly or daily limits) back the
+# points off instead, so they keep showing their last forecast until the limit resets.
+RATE_WAIT_MAX = 300
+SOURCE_PAUSE = {}  # source -> (until_ts, message)
+
+
+def rate_limit_wait(e):
+    """Seconds to wait after a 429, from Retry-After or the message; None if e isn't a rate limit."""
+    if e.status != 429:
+        return None
+    if e.retry_after:
+        return max(1.0, e.retry_after)
+    msg, now = str(e).lower(), time.time()
+    if "daily" in msg or "per day" in msg:
+        return 86400 - now % 86400 + 30  # just past midnight UTC
+    if "hourly" in msg or "per hour" in msg:
+        return 3600 - now % 3600 + 30
+    return 65  # "try again in one minute", or no hint
+
+
+def pause_source(src, seconds, why):
+    with BACKOFF_LOCK:
+        SOURCE_PAUSE[src] = (time.time() + seconds, why)
+    log("  ~ %s: rate limited, waiting %d s before retrying (%s)" % (src, math.ceil(seconds), why[:90]))
+
+
+def source_paused(src):
+    with BACKOFF_LOCK:
+        p = SOURCE_PAUSE.get(src)
+    return p if p and p[0] > time.time() else None
 
 
 THROTTLE = {
@@ -647,7 +749,7 @@ def compute_route(wps):
             log("route via %s (%d pts, %.0f mi)" % (ns, len(data["points"]), data["total_m"] / M_PER_MI))
             return data, errors
         except FetchError as ex:
-            set_backoff(ns, base, str(ex), ex.retry_after or 600)
+            set_backoff(ns, base, str(ex), rate_limit_wait(ex) or ex.retry_after or 600)
             errors.append(str(ex))
         except (KeyError, IndexError, TypeError, ValueError) as ex:
             set_backoff(ns, base, "unexpected routing response: %r" % ex, 600)
@@ -990,12 +1092,28 @@ def parse_open_meteo(item, models):
     return members
 
 
+def _om_budget():
+    b = CONFIG.get("open_meteo_budget") or {}
+    return CallBudget("Open-Meteo", [(60, b.get("minute", 450)), (3600, b.get("hour", 4000)),
+                                     (86400, b.get("day", 8000))], os.path.join(CACHE_DIR, "open_meteo_calls.json"))
+
+
+OM_BUDGET = _om_budget()
+
+
+def om_weight(n_locations, models):
+    """How many calls Open-Meteo counts a request as (assuming each model's variables count)."""
+    days = (WINDOW_END - WINDOW_START) / 86400.0 + 2
+    return n_locations * max(1.0, len(OM_HOURLY) * len(models) / 10.0) * max(1.0, days / 14.0)
+
+
 def _probe_bad_models(models, payload):
     """A 400 for a multi-model call usually means one model name isn't valid. Find it."""
     bad = []
     for m in models:
         params = {"latitude": "%.3f" % payload["lat"], "longitude": "%.3f" % payload["lon"],
                   "hourly": "temperature_2m", "models": m, "forecast_days": 1}
+        OM_BUDGET.take(1)
         THROTTLE["open_meteo"].wait()
         try:
             http_request(OPEN_METEO_URL + "?" + urllib.parse.urlencode(params))
@@ -1016,6 +1134,7 @@ def fetch_open_meteo(batch):
         "hourly": ",".join(OM_HOURLY), "models": ",".join(models),
         "start_date": OM_START, "end_date": OM_END, "timezone": "GMT", "timeformat": "unixtime",
     }
+    OM_BUDGET.take(om_weight(len(batch), models))
     THROTTLE["open_meteo"].wait()
     log("Open-Meteo: %d locations" % len(batch))
     try:
@@ -1124,6 +1243,8 @@ def fetch_nws(batch):
                 data, _ = http_request("https://api.weather.gov/points/%.4f,%.4f" % (p["lat"], p["lon"]),
                                        headers={"Accept": "application/geo+json"})
             except FetchError as e:
+                if e.status == 429:
+                    raise  # the worker waits and retries
                 set_backoff("nws", lk, str(e), 86400 if e.status == 404 else None)
                 continue
             grid = (data.get("properties") or {}).get("forecastGridData")
@@ -1139,6 +1260,8 @@ def fetch_nws(batch):
         try:
             data, _ = http_request(grid, headers={"Accept": "application/geo+json"})
         except FetchError as e:
+            if e.status == 429:
+                raise
             set_backoff("nws", lk, str(e))
             continue
         CACHE.put("nws_grid", grid, {"ok": True, "fetched": now, "expires": now + ttl("nws"),
@@ -1188,6 +1311,8 @@ def fetch_met_no(batch):
         try:
             data, headers = http_request(url)
         except FetchError as e:
+            if e.status == 429:
+                raise  # the worker waits and retries
             set_backoff("met_no", lk, str(e))
             continue
         now = time.time()
@@ -1322,6 +1447,10 @@ class SourceWorker(threading.Thread):
 
     def run(self):
         while True:
+            paused = source_paused(self.src)
+            if paused:  # rate limited: wait it out, then carry on with the same queue
+                time.sleep(max(0.5, paused[0] - time.time()))
+                continue
             with self.cv:
                 while not self.pending:
                     self.cv.wait()
@@ -1330,11 +1459,17 @@ class SourceWorker(threading.Thread):
                     k, p = self.pending.popitem(last=False)
                     self.inflight.add(k)
                     batch.append((k, p))
+            retry = False
             try:
                 self.fn(batch)
             except FetchError as e:
-                for k, _ in batch:
-                    set_backoff(self.src, k, str(e))
+                wait = rate_limit_wait(e)
+                if wait is not None and wait <= RATE_WAIT_MAX:
+                    pause_source(self.src, wait, str(e))
+                    retry = True
+                else:  # not a rate limit, or a long one: keep the last forecast until then
+                    for k, _ in batch:
+                        set_backoff(self.src, k, str(e), wait)
             except Exception as e:  # a parsing surprise shouldn't kill the worker
                 traceback.print_exc()
                 for k, _ in batch:
@@ -1343,6 +1478,10 @@ class SourceWorker(threading.Thread):
                 with self.cv:
                     for k, _ in batch:
                         self.inflight.discard(k)
+                    if retry:  # back to the front of the queue
+                        for k, p in reversed(batch):
+                            self.pending[k] = p
+                            self.pending.move_to_end(k, last=False)
 
 
 WORKERS = {
@@ -1551,9 +1690,13 @@ def weather_for_plan(plan, enqueue=True):
             status[src]["error_msg"] = LAST_ERROR.get(src)
     if "open_meteo" in status and BAD_MODELS:
         status["open_meteo"]["note"] = "skipped models: " + ", ".join(sorted(BAD_MODELS))
+    for src in sources:
+        p = source_paused(src)
+        status[src]["paused"] = "rate limited; retrying in %d s" % math.ceil(p[0] - time.time()) if p else None
     if "google_weather" in status:
         b = METER.blocked("weather")
-        status["google_weather"]["paused"] = b[0] if b else None
+        if b:
+            status["google_weather"]["paused"] = b[0]
     out = {"queued": queued_total, "sources": status}
     if google_key():
         out["google"] = METER.snapshot()

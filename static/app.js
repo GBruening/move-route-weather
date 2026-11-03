@@ -367,13 +367,14 @@ function glyphSVG(s, w, plan) {
       const gust = Math.max(w.ghi ?? w.g ?? w.w, w.w);
       const glen = arrowLen(gust);
       const col = windColor(w.w);
-      const tip = -len / 2;
+      // the arrow starts at the point and blows downwind from it
+      const tip = -len;
       const head = `M0 ${tip - 2} L-6 ${tip + 7} L6 ${tip + 7} Z`;
       parts.push(`<g class="hit" transform="rotate(${(w.d + 180) % 360})">`
-        + (glen > len + 4 ? `<line x1="0" y1="${glen / 2}" x2="0" y2="${-glen / 2}" stroke="${col}" stroke-width="1.6" stroke-dasharray="3 3" opacity=".8"/>` : '')
-        + `<line x1="0" y1="${len / 2}" x2="0" y2="${tip + 5}" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>`
+        + (glen > len + 4 ? `<line x1="0" y1="0" x2="0" y2="${-glen}" stroke="${col}" stroke-width="1.6" stroke-dasharray="3 3" opacity=".8"/>` : '')
+        + `<line x1="0" y1="0" x2="0" y2="${tip + 5}" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>`
         + `<path d="${head}" fill="#fff" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/>`
-        + `<line x1="0" y1="${len / 2}" x2="0" y2="${tip + 5}" stroke="${col}" stroke-width="3.2" stroke-linecap="round"/>`
+        + `<line x1="0" y1="0" x2="0" y2="${tip + 5}" stroke="${col}" stroke-width="3.2" stroke-linecap="round"/>`
         + `<path d="${head}" fill="${col}"/></g>`);
     }
     let bx = 10;
@@ -855,7 +856,10 @@ function renderSources() {
       detail = 'waiting';
     } else {
       const got = st.fresh + st.stale;
-      if (st.queued) { cls += ' loading'; detail = `fetching ${st.queued} of ${st.points} points…`; }
+      if (st.paused && src.id !== 'google_weather') {
+        cls += ' paused';
+        detail = `${st.paused}${st.queued ? ` · ${st.queued} points waiting` : ''}${got ? ' · showing the last forecast meanwhile' : ''}`;
+      } else if (st.queued) { cls += ' loading'; detail = `fetching ${st.queued} of ${st.points} points…`; }
       else if (st.error && !got) { cls += ' error'; detail = `unavailable: ${st.error_msg || 'error'}`; }
       else {
         detail = `${got}/${st.points} points · fetched ${minsAgo(st.newest)}`;
@@ -919,7 +923,9 @@ function renderProfile() {
   $('#pf-swatch').style.background = meta ? meta.color : '';
   $('#pf-title').textContent = meta ? `${meta.name}${plan && plan.portland ? ' via Portland' : ''} — weather when you get there` : 'Weather along the route';
   $('#pf-sub').textContent = plan ? `${plan.total_miles.toLocaleString()} mi · hover for details, click to find it on the map` : '';
-  if (!plan || !plan.samples) { host.innerHTML = '<div class="pf-empty">Loading route…</div>'; return; }
+  if (!plan || !plan.samples) { host.innerHTML = '<div class="pf-empty">Loading route…</div>'; renderNav(null); return; }
+  // a selected stretch belongs to the route it was picked on (x positions differ between routes)
+  if (state.span && state.spanKey !== vkey(state.focus)) { state.span = null; state.spanDay = null; }
 
   const L = state.layers;
   const S = plan.samples;
@@ -927,7 +933,21 @@ function renderProfile() {
   const Wd = Math.max(340, host.clientWidth || 800);
   const ml = 46; const mr = 46;
   const xmax = Math.max(...plan.days.map((d) => d.x1));
-  const X = (x) => ml + (x / xmax) * (Wd - ml - mr);
+  // the strip above the chart can narrow the view to one day or any stretch (state.span)
+  const sp = state.span;
+  const vx0 = sp ? sp.x0 : 0; const vx1 = sp ? sp.x1 : xmax;
+  const X = (x) => ml + ((x - vx0) / (vx1 - vx0)) * (Wd - ml - mr);
+  const edge = (vx1 - vx0) * 0.01;
+  const inView = (x) => x >= vx0 - edge && x <= vx1 + edge;
+  const VI = S.map((_, i) => i).filter((i) => inView(S[i].x));  // samples in view
+  const WXv = VI.map((i) => WX[i]);
+  renderNav(plan, xmax);
+  if (sp && VI.length) {
+    const a = S[VI[0]]; const b = S[VI[VI.length - 1]];
+    const d = state.spanDay != null ? plan.days[state.spanDay] : null;
+    if (d) $('#pf-title').textContent = `${meta.name} — ${d.label} · ${d.title}`;
+    $('#pf-sub').textContent = `mile ${Math.round(a.mile)}–${Math.round(b.mile)} · ${fmtTime(a.eta, a.tz, true)} to ${fmtTime(b.eta, b.tz, true)}`;
+  }
 
   // vertical layout depends on which layers are on; when the chart pane has been
   // resized, the temp/precip/wind rows stretch (k) to fill its height
@@ -948,16 +968,20 @@ function renderProfile() {
   if (L.wind) { const h = rowH.wind * k; P.wind = [y + 4, y + 4 + h]; y += h + 12; }
   const axisY = y + 4;
   const H = axisY + 30;
-  const out = [];
-  out.push(`<svg viewBox="0 0 ${Wd} ${H}" height="${H}" role="img" aria-label="Weather along ${esc(plan.name)}">`);
+  const out = [];   // plot contents, clipped to the plot area
+  const lab = [];   // axis labels in the left and right margins
+  out.push(`<svg viewBox="0 0 ${Wd} ${H}" height="${H}" role="img" aria-label="Weather along ${esc(plan.name)}">`
+    + `<defs><clipPath id="pf-clip"><rect x="${ml - 7}" y="0" width="${Wd - ml - mr + 14}" height="${H}"/></clipPath></defs>`
+    + '<g clip-path="url(#pf-clip)">');
 
   // day bands and nights
   plan.days.forEach((d, i) => {
     const x0 = X(d.x0); const x1 = X(d.x1);
     out.push(`<rect x="${x0}" y="0" width="${x1 - x0}" height="${axisY}" fill="${i % 2 ? '#fafbf9' : '#ffffff'}"/>`);
     const label = `${d.label} · ${d.title}${d.estimated ? ' (est.)' : ''}`;
-    const maxChars = Math.max(4, Math.floor((x1 - x0 - 8) / 6.1));
-    out.push(`<text x="${x0 + 4}" y="12" font-size="11" font-weight="600" fill="#4a5662">${esc(label.length > maxChars ? `${label.slice(0, maxChars - 1)}…` : label)}</text>`);
+    const lx0 = Math.max(x0, ml); const lx1 = Math.min(x1, Wd - mr);  // the part of the day in view
+    const maxChars = Math.floor((lx1 - lx0 - 8) / 6.1);
+    if (maxChars >= 4) out.push(`<text x="${lx0 + 4}" y="12" font-size="11" font-weight="600" fill="#4a5662">${esc(label.length > maxChars ? `${label.slice(0, maxChars - 1)}…` : label)}</text>`);
     if (i < plan.days.length - 1) {
       const nx0 = x1; const nx1 = X(plan.days[i + 1].x0);
       out.push(`<rect x="${nx0}" y="0" width="${nx1 - nx0}" height="${axisY}" fill="#e9ece8"/>`);
@@ -979,7 +1003,7 @@ function renderProfile() {
   });
   if (cur.length) segs.push(cur);
 
-  const spacing = (Wd - ml - mr) / Math.max(1, S.length);
+  const spacing = (Wd - ml - mr) / Math.max(1, VI.length);
 
   if (P.arrows) {
     const [t, b] = P.arrows; const cy = (t + b) / 2;
@@ -990,20 +1014,20 @@ function renderProfile() {
       const len = Math.min(20, 8 + w.w * 0.45); const col = windColor(w.w);
       out.push(`<g transform="translate(${x},${cy}) rotate(${(w.d + 180) % 360})"><line x1="0" y1="${len / 2}" x2="0" y2="${-len / 2 + 4}" stroke="${col}" stroke-width="2.4" stroke-linecap="round"/><path d="M0 ${-len / 2 - 1.5} L-4 ${-len / 2 + 5} L4 ${-len / 2 + 5} Z" fill="${col}"/></g>`);
     });
-    out.push(`<text x="${ml - 6}" y="${cy + 4}" text-anchor="end" font-size="10" fill="#65707c">wind</text>`);
+    lab.push(`<text x="${ml - 6}" y="${cy + 4}" text-anchor="end" font-size="10" fill="#65707c">wind</text>`);
   }
 
   if (P.temp) {
     const [t, b] = P.temp;
     const vals = [32];
-    WX.forEach((w) => { if (w && w.tlo != null) vals.push(w.tlo, w.thi); });
+    WXv.forEach((w) => { if (w && w.tlo != null) vals.push(w.tlo, w.thi); });
     const lo = Math.floor(Math.min(...vals) - 2); const hi = Math.ceil(Math.max(...vals) + 2);
     const Y = (v) => t + ((hi - v) / (hi - lo)) * (b - t);
     out.push(`<line x1="${ml}" x2="${Wd - mr}" y1="${Y(32)}" y2="${Y(32)}" stroke="#3b82f6" stroke-dasharray="4 3" stroke-width="1"/>`);
-    out.push(`<text x="${Wd - mr + 4}" y="${Y(32) + 3.5}" font-size="10" fill="#3b82f6">32°</text>`);
-    out.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="#65707c">${hi}°</text>`);
-    out.push(`<text x="${ml - 6}" y="${b}" text-anchor="end" font-size="10" fill="#65707c">${lo}°</text>`);
-    out.push(`<text x="${ml - 6}" y="${(t + b) / 2 + 4}" text-anchor="end" font-size="10" fill="#4a5662" font-weight="600">temp</text>`);
+    lab.push(`<text x="${Wd - mr + 4}" y="${Y(32) + 3.5}" font-size="10" fill="#3b82f6">32°</text>`);
+    lab.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="#65707c">${hi}°</text>`);
+    lab.push(`<text x="${ml - 6}" y="${b}" text-anchor="end" font-size="10" fill="#65707c">${lo}°</text>`);
+    lab.push(`<text x="${ml - 6}" y="${(t + b) / 2 + 4}" text-anchor="end" font-size="10" fill="#4a5662" font-weight="600">temp</text>`);
     for (const seg of segs) {
       const pts = seg.filter((i) => WX[i] && WX[i].t != null);
       if (pts.length < 1) continue;
@@ -1017,12 +1041,12 @@ function renderProfile() {
 
   if (P.precip) {
     const [t, b] = P.precip; const h = b - t;
-    const rs = Math.max(0.25, ...WX.map((w) => (w && w.rhi) || 0));
-    const ss = Math.max(2, ...WX.map((w) => (w && w.shi) || 0));
+    const rs = Math.max(0.25, ...WXv.map((w) => (w && w.rhi) || 0));
+    const ss = Math.max(2, ...WXv.map((w) => (w && w.shi) || 0));
     out.push(`<line x1="${ml}" x2="${Wd - mr}" y1="${b}" y2="${b}" stroke="#cfd5cf"/>`);
-    if (L.rain) out.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="${RAIN}">${rs.toFixed(2)}″</text><text x="${ml - 6}" y="${b - 2}" text-anchor="end" font-size="10" fill="${RAIN}" font-weight="600">rain</text>`);
-    if (L.snow) out.push(`<text x="${Wd - mr + 4}" y="${t + 8}" font-size="10" fill="${SNOW}">${ss.toFixed(1)}″</text><text x="${Wd - mr + 4}" y="${b - 2}" font-size="10" fill="${SNOW}" font-weight="600">snow</text>`);
-    const bw = Math.max(2, Math.min(6, spacing * 0.38));
+    if (L.rain) lab.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="${RAIN}">${rs.toFixed(2)}″</text><text x="${ml - 6}" y="${b - 2}" text-anchor="end" font-size="10" fill="${RAIN}" font-weight="600">rain</text>`);
+    if (L.snow) lab.push(`<text x="${Wd - mr + 4}" y="${t + 8}" font-size="10" fill="${SNOW}">${ss.toFixed(1)}″</text><text x="${Wd - mr + 4}" y="${b - 2}" font-size="10" fill="${SNOW}" font-weight="600">snow</text>`);
+    const bw = Math.max(2, Math.min(10, spacing * 0.38));
     S.forEach((s, i) => {
       const w = WX[i]; if (!w) return;
       const x = X(s.x);
@@ -1042,14 +1066,14 @@ function renderProfile() {
 
   if (P.wind) {
     const [t, b] = P.wind; const h = b - t;
-    const wmax = Math.max(50, ...WX.map((w) => ((w && (w.ghi ?? w.g ?? w.w)) || 0) + 5));
+    const wmax = Math.max(50, ...WXv.map((w) => ((w && (w.ghi ?? w.g ?? w.w)) || 0) + 5));
     const Y = (v) => b - (v / wmax) * h;
     out.push(`<line x1="${ml}" x2="${Wd - mr}" y1="${b}" y2="${b}" stroke="#cfd5cf"/>`);
     out.push(`<line x1="${ml}" x2="${Wd - mr}" y1="${Y(40)}" y2="${Y(40)}" stroke="#dc2626" stroke-dasharray="4 3" opacity=".6"/>`);
-    out.push(`<text x="${Wd - mr + 4}" y="${Y(40) + 3.5}" font-size="10" fill="#dc2626">40</text>`);
-    out.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="#65707c">${Math.round(wmax)}</text>`);
-    out.push(`<text x="${ml - 6}" y="${b - 2}" text-anchor="end" font-size="10" fill="#4a5662" font-weight="600">mph</text>`);
-    const bw = Math.max(2, Math.min(6, spacing * 0.5));
+    lab.push(`<text x="${Wd - mr + 4}" y="${Y(40) + 3.5}" font-size="10" fill="#dc2626">40</text>`);
+    lab.push(`<text x="${ml - 6}" y="${t + 8}" text-anchor="end" font-size="10" fill="#65707c">${Math.round(wmax)}</text>`);
+    lab.push(`<text x="${ml - 6}" y="${b - 2}" text-anchor="end" font-size="10" fill="#4a5662" font-weight="600">mph</text>`);
+    const bw = Math.max(2, Math.min(12, spacing * 0.5));
     S.forEach((s, i) => {
       const w = WX[i]; if (!w || w.w == null) return;
       const x = X(s.x);
@@ -1068,39 +1092,58 @@ function renderProfile() {
     if (st.kind === 'pass') out.push(`<path d="M${x} ${axisY + 1} l5 8 l-10 0 Z" fill="${col}"/>`);
     else out.push(`<circle cx="${x}" cy="${axisY + 5}" r="${big(st) ? 4.5 : 3}" fill="${big(st) ? col : '#fff'}" stroke="${col}" stroke-width="1.6"/>`);
   });
-  // labels for start, nights and arrival; drop the time, then the label, when they'd collide
+  // zoomed in, passes along the way get a marker too
+  const wayPasses = sp ? VI.filter((i) => S[i].stop == null && S[i].kind === 'pass') : [];
+  wayPasses.forEach((i) => out.push(`<path d="M${X(S[i].x)} ${axisY + 2} l4 7 l-8 0 Z" fill="#1f2937" opacity=".75"/>`));
+
+  // labels: the whole route names start, nights and arrival; a zoomed view also names fuel
+  // stops, breaks, passes and towns. Most important first; a label that would collide drops
+  // its time, then is skipped.
+  const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+  let cands;
+  if (!sp) {
+    const lab0 = plan.stops.map((st, k) => [st, k]).filter(([st, k]) => big(st) && !(st.kind === 'start' && k > 0));
+    cands = [lab0[lab0.length - 1], lab0[0], ...lab0.slice(1, -1)].filter(Boolean)
+      .map(([st]) => ({ x: st.x, name: st.short, t: st.kind === 'start' ? st.depart : st.arrive, tz: st.tz }));
+  } else {
+    const rank = (kind) => (['start', 'overnight', 'end'].includes(kind) ? 0 : kind === 'pass' ? 2 : kind === 'town' ? 3 : 1);
+    cands = plan.stops.filter((st) => inView(st.x))
+      .map((st) => ({ x: st.x, name: st.short, t: st.kind === 'start' ? st.depart : (st.arrive ?? st.depart), tz: st.tz, r: rank(st.kind) }))
+      .concat(VI.filter((i) => S[i].stop == null && (S[i].kind === 'pass' || S[i].kind === 'town'))
+        .map((i) => ({ x: S[i].x, name: clip(S[i].name, 18), t: S[i].eta, tz: S[i].tz, r: rank(S[i].kind) })))
+      .sort((a, b) => a.r - b.r || a.x - b.x);
+  }
   const taken = [];
-  const labelled = plan.stops.map((st, k) => [st, k]).filter(([st, k]) => big(st) && !(st.kind === 'start' && k > 0));
-  const order = [labelled[labelled.length - 1], labelled[0], ...labelled.slice(1, -1)].filter(Boolean);
-  for (const [st, k] of order) {
-    const x = X(st.x);
-    const t = st.kind === 'start' ? st.depart : st.arrive;
-    const anchor = k === 0 ? 'start' : k === plan.stops.length - 1 ? 'end' : 'middle';
+  for (const c of cands) {
+    const x = X(c.x);
     for (const withTime of [true, false]) {
-      const txt = withTime ? `${st.short} ${fmtTime(t, st.tz)}` : st.short;
+      const txt = withTime && c.t != null ? `${c.name} ${fmtTime(c.t, c.tz)}` : c.name;
       const w = txt.length * 5.9 + 8;
-      const x0 = anchor === 'start' ? x : anchor === 'end' ? x - w : x - w / 2;
+      const x0 = Math.max(ml - 6, Math.min(x - w / 2, Wd - mr + 6 - w));
       if (taken.some(([a, b]) => x0 < b && x0 + w > a)) continue;
       taken.push([x0, x0 + w]);
-      out.push(`<text x="${x}" y="${axisY + 22}" text-anchor="${anchor}" font-size="10.5" fill="#4a5662"><tspan font-weight="600">${esc(st.short)}</tspan>${withTime ? ` ${esc(fmtTime(t, st.tz))}` : ''}</text>`);
+      out.push(`<text x="${x0 + w / 2}" y="${axisY + 22}" text-anchor="middle" font-size="10.5" fill="#4a5662"><tspan font-weight="600">${esc(c.name)}</tspan>${txt !== c.name ? ` ${esc(fmtTime(c.t, c.tz))}` : ''}</text>`);
       break;
     }
   }
+  out.push('</g>', ...lab);
 
   out.push(`<line id="pf-cursor" x1="0" x2="0" y1="18" y2="${axisY}" stroke="#111827" stroke-width="1" visibility="hidden"/>`);
   out.push(`<rect id="pf-hit" x="${ml}" y="0" width="${Wd - ml - mr}" height="${H}" fill="transparent"/>`);
   out.push('</svg>');
   host.innerHTML = out.join('');
 
-  // interaction
+  // interaction (a redraw replaces the hovered element without a mouseleave, so reset the tooltip)
+  $('#pf-tip').hidden = true;
+  if (state.overlay) state.overlay.setHighlight(null);
   const svg = host.querySelector('svg');
   const hit = host.querySelector('#pf-hit');
   const cursor = host.querySelector('#pf-cursor');
   const tip = $('#pf-tip');
   const xs = S.map((s) => X(s.x));
   const nearest = (px) => {
-    let best = 0; let bd = Infinity;
-    xs.forEach((x, i) => { const d = Math.abs(x - px); if (d < bd) { bd = d; best = i; } });
+    let best = VI.length ? VI[0] : 0; let bd = Infinity;
+    VI.forEach((i) => { const d = Math.abs(xs[i] - px); if (d < bd) { bd = d; best = i; } });
     return best;
   };
   const toLocal = (e) => {
@@ -1131,6 +1174,111 @@ function renderProfile() {
     if (state.overlay) state.overlay.setHighlight(null);
   });
   hit.addEventListener('click', (e) => focusSample(plan, nearest(toLocal(e))));
+}
+
+// ---------------------------------------------------------------------------
+// Overview strip above the chart: one button per day, plus a draggable window
+// for any stretch. The chart zooms to the selection and the map fits to it.
+// ---------------------------------------------------------------------------
+function renderNav(plan, xmax) {
+  const track = $('#nav-track');
+  if (!plan) { track.innerHTML = ''; return; }
+  const pct = (x) => `${((x / xmax) * 100).toFixed(3)}%`;
+  const sp = state.span;
+  let html = plan.days.map((d, i) => `<button type="button" class="nav-day" data-day="${i}" aria-pressed="${state.spanDay === i}"`
+    + ` style="left:${pct(d.x0)};width:${pct(d.x1 - d.x0)}" title="${esc(`${d.label} · ${d.title}`)}">${esc(d.label)}<span>${esc(d.title)}</span></button>`).join('');
+  if (sp) {
+    html += `<div class="nav-shade" style="left:0;width:${pct(sp.x0)}"></div><div class="nav-shade" style="left:${pct(sp.x1)};right:0"></div>`
+      + `<div class="nav-win" style="left:${pct(sp.x0)};width:${pct(sp.x1 - sp.x0)}"><span class="nav-h" data-side="l"></span><span class="nav-h" data-side="r"></span></div>`;
+  }
+  track.innerHTML = html;
+  $('#nav-all').setAttribute('aria-pressed', !sp);
+}
+
+let pfRaf = 0;
+function setSpan(span, day = null, fit = true) {
+  state.span = span;
+  state.spanDay = day;
+  state.spanKey = vkey(state.focus);
+  if (!pfRaf) pfRaf = requestAnimationFrame(() => { pfRaf = 0; renderProfile(); });
+  if (fit) fitMapToSpan();
+}
+
+function selectDay(i) {
+  const plan = focusPlan();
+  if (!plan || !plan.days[i]) return;
+  if (state.spanDay === i) { setSpan(null); return; }  // clicking the selected day again shows the whole route
+  setSpan({ x0: plan.days[i].x0, x1: plan.days[i].x1 }, i);
+}
+
+function fitMapToSpan() {
+  const plan = focusPlan();
+  if (!state.map || !plan) return;
+  const sp = state.span;
+  if (!sp) { state.fitted = false; renderMapRoutes(); return; }
+  const b = new state.gm.LatLngBounds();
+  const path = state.spanDay != null && plan.paths ? plan.paths[state.spanDay] : null;
+  if (path) path.forEach(([lat, lng]) => b.extend({ lat, lng }));
+  else plan.samples.forEach((s) => { if (s.x >= sp.x0 && s.x <= sp.x1) b.extend({ lat: s.lat, lng: s.lon }); });
+  if (b.isEmpty()) return;
+  state.map.fitBounds(b, { top: 50, right: 50, bottom: 50, left: 50 });
+  google.maps.event.addListenerOnce(state.map, 'idle', () => { if (state.map.getZoom() > 10) state.map.setZoom(10); });
+}
+
+function initNav() {
+  const track = $('#nav-track');
+  $('#nav-all').addEventListener('click', () => setSpan(null));
+  // keyboard activation of a day button (mouse clicks are handled by the pointer code below)
+  track.addEventListener('click', (e) => {
+    const b = e.target.closest('.nav-day');
+    if (b && e.detail === 0) selectDay(+b.dataset.day);
+  });
+  track.addEventListener('pointerdown', (e) => {
+    const plan = focusPlan();
+    if (!plan || e.button !== 0) return;
+    e.preventDefault();
+    const xmax = Math.max(...plan.days.map((d) => d.x1));
+    const r = track.getBoundingClientRect();
+    const toX = (cx) => Math.max(0, Math.min(1, (cx - r.left) / r.width)) * xmax;
+    const h = e.target.closest('.nav-h');
+    const mode = h ? h.dataset.side : e.target.closest('.nav-win') ? 'move' : 'new';
+    const x = toX(e.clientX);
+    const s0 = state.span;
+    const minW = xmax * 0.03;
+    const cx0 = e.clientX;
+    let moved = false;
+    track.setPointerCapture(e.pointerId);
+    const onMove = (ev) => {
+      if (!moved && Math.abs(ev.clientX - cx0) < 4) return;
+      if (!moved) { moved = true; document.body.classList.add('is-dragging-nav'); }
+      const p = toX(ev.clientX);
+      let a; let b;
+      if (mode === 'move' && s0) { const w = s0.x1 - s0.x0; a = Math.max(0, Math.min(xmax - w, s0.x0 + p - x)); b = a + w; }
+      else if (mode === 'l' && s0) { a = Math.min(p, s0.x1 - minW); b = s0.x1; }
+      else if (mode === 'r' && s0) { a = s0.x0; b = Math.max(p, s0.x0 + minW); }
+      else {
+        a = Math.min(x, p); b = Math.max(x, p);
+        if (b - a < minW) { if (p >= x) b = Math.min(xmax, a + minW); else a = Math.max(0, b - minW); }
+      }
+      setSpan({ x0: Math.max(0, a), x1: Math.min(xmax, b) }, null, false);
+    };
+    const onEnd = () => {
+      track.removeEventListener('pointermove', onMove);
+      track.removeEventListener('pointerup', onEnd);
+      track.removeEventListener('pointercancel', onEnd);
+      document.body.classList.remove('is-dragging-nav');
+      if (moved) { fitMapToSpan(); return; }
+      const i = plan.days.findIndex((d) => x >= d.x0 && x <= d.x1);  // a click picks the day under it
+      if (i >= 0) selectDay(i);
+    };
+    track.addEventListener('pointermove', onMove);
+    track.addEventListener('pointerup', onEnd);
+    track.addEventListener('pointercancel', onEnd);
+  });
+  document.addEventListener('keydown', (e) => {
+    const typing = e.target instanceof Element && e.target.closest('input, textarea');
+    if (e.key === 'Escape' && state.span && !typing) setSpan(null);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1202,6 +1350,7 @@ async function boot() {
   pc.checked = state.portland;
   pc.addEventListener('change', () => setPortland(pc.checked));
   initPanes();
+  initNav();
   renderLayers();
   renderLegend();
   renderAll();

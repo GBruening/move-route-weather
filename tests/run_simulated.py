@@ -32,6 +32,7 @@ cache_dir = tempfile.mkdtemp(prefix="move-weather-test-")
 server.CACHE = server.DiskCache(cache_dir)
 server.CACHE_DIR = cache_dir
 server.METER = server.UsageMeter(os.path.join(cache_dir, "google_usage.json"))
+server.OM_BUDGET = server.CallBudget("Open-Meteo", [(60, 1e9)])  # no pacing here; CallBudget is checked below
 server.CONFIG["google_maps_api_key"] = "TEST-KEY" if route_mode == "google" else ""
 server.CONFIG["sources"]["google_weather"] = True  # off in config.json, but the code path is still tested
 for t in server.THROTTLE.values():
@@ -101,6 +102,34 @@ before = len(fakeapis.CALLS)
 for rid, pl in variants:
     get("/api/plan?route=%s&portland=%d" % (rid, pl))
 check(len(fakeapis.CALLS) == before, "repeat requests served from cache (no outside calls)")
+
+# ---- rate limits ----------------------------------------------------------------
+print("\nRate limits")
+fakeapis.RATE_LIMIT_ONCE.update({"api.met.no", "api.open-meteo.com"})
+probe = {"lat": 46.2, "lon": -119.1, "lk": "rl-probe"}
+server.WORKERS["met_no"].want("rl-probe", probe)
+server.WORKERS["open_meteo"].want(server.om_key("rl-probe"), dict(probe, models=server.active_models()))
+t0 = time.time()
+while time.time() - t0 < 20 and not (server.CACHE.get("met_no", "rl-probe") and server.CACHE.get("open_meteo", server.om_key("rl-probe"))):
+    time.sleep(0.2)
+check(not fakeapis.RATE_LIMIT_ONCE, "both services answered 429 once")
+check(bool(server.CACHE.get("met_no", "rl-probe")), "MET Norway waited out its 429 and fetched the point")
+check(bool(server.CACHE.get("open_meteo", server.om_key("rl-probe"))), "Open-Meteo waited out its 429 and fetched the point")
+check(server.get_backoff("met_no", "rl-probe") is None, "a short 429 doesn't mark the point failed")
+check(server.rate_limit_wait(server.FetchError("Daily API request limit exceeded", status=429)) > 3600,
+      "a daily-limit 429 waits for the next day")
+
+b = server.CallBudget("test", [(1.5, 10)])
+t0 = time.time(); b.take(6); b.take(6)
+check(1.0 < time.time() - t0 < 4, "budget waits for the window when a call would go over")
+b = server.CallBudget("test", [(3600, 10)])
+b.take(6)
+try:
+    b.take(6)
+    check(False, "budget raises when the wait is longer than RATE_WAIT_MAX")
+except server.FetchError as e:
+    check(e.status == 429 and e.retry_after > 3000, "budget raises when the wait is longer than RATE_WAIT_MAX")
+check(abs(server.om_weight(40, ["a"] * 6) - 192) < 1, "Open-Meteo weight: 40 places x 6 models = 192 calls")
 
 # ---- Google usage meter -------------------------------------------------------
 print("\nGoogle usage meter")
