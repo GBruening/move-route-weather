@@ -19,6 +19,9 @@ each point**, aggregated from several sources. The owner runs it on **Windows**
   DST ended Nov 1, 2026).
 - Changes to `static/` need only a browser refresh; changes to `server.py`, `trip.json` or
   config need a server restart.
+- The app must keep running as a plain script with no build. The packaged apps
+  (`packaging/`) are an optional extra; PyInstaller is only installed on the machine that
+  builds them, never needed to run the code.
 
 ## Files
 
@@ -31,6 +34,8 @@ each point**, aggregated from several sources. The owner runs it on **Windows**
 | `static/style.css`, `static/index.html` | Layout and styling. |
 | `config.json` / `config.local.json` | Settings; local file overrides shared file (sources on/off, TTLs, Open-Meteo model list, port). |
 | `tests/run_simulated.py`, `tests/fakeapis.py` | Offline end-to-end test against simulated API responses. |
+| `packaging/MoveRouteWeather.spec`, `packaging/build.py` | Builds the double-click app (Windows `.exe`, macOS binary) with PyInstaller. Smoke-tests it (`--online` also checks HTTPS) and zips it with `config.local.example.json` and "How to run.txt" into `release/`. |
+| `.github/workflows/build-apps.yml` | On a `v*` tag, or run by hand: tests, then builds on Windows and macOS (Apple Silicon) and attaches the zips to a GitHub Release. |
 
 ## Routes (as the owner wants them)
 
@@ -47,6 +52,15 @@ Route-card badges come from `badge` / `badge_portland`; `portland` is `toggle` (
 `portland_days`), `always`, or `never`.
 
 ## How it works (server.py)
+
+- **Files and folders**: `RES_DIR` holds the bundled files (`static/`, `trip.json`,
+  `config.json`). `DATA_DIR` holds your files (`config.local.json`, `trip.local.json`,
+  `cache/`). Run as a script, both are the repo folder. In a packaged app (`FROZEN`),
+  `RES_DIR` is PyInstaller's temporary unpack folder and `DATA_DIR` is the folder next to the
+  app, or the user's app-data folder if that one isn't writable. `app_file()` lets a
+  `trip.json` or `config.json` next to the app override the bundled copy.
+- **HTTPS**: `SSL_CONTEXT` falls back to the OS certificate bundle (`/etc/ssl/cert.pem` etc.)
+  when Python's default store is empty, which is the case in a packaged Mac app.
 
 - **Routing per day template**: Google Routes API (address waypoints, then lat/lon) → OSRM
   demo server → straight lines (flagged `approx`). Stops are routing waypoints; leg distances

@@ -6,8 +6,14 @@ Rock Springs Saturday evening, Snoqualmie Monday ~1:15 PM, and so on).
 
 ## Run it
 
-You need Python 3.8 or newer (free from python.org or the Microsoft Store). No packages
-to install.
+**Easiest: download the app.** On the repository's **Releases** page, download
+`MoveRouteWeather-windows-x64.zip` (Windows) or `MoveRouteWeather-mac-arm64.zip`
+(Mac with Apple Silicon, M1 or newer). Unzip it and follow `How to run.txt` inside. No
+Python needed. Put your own `config.local.json` next to the app (see below). Your
+schedule edits and downloaded forecasts are saved in that same folder.
+
+**Or run it from the code.** You need Python 3.8 or newer (free from python.org or the
+Microsoft Store). No packages to install.
 
 - **Windows:** double-click `start-windows.bat`, or in a terminal run `py server.py`.
 - **Mac/Linux:** `python3 server.py`
@@ -73,6 +79,25 @@ Nothing is fetched until a route is viewed. Then:
   off for 15 minutes.
 
 Delete the `cache/` folder to start fresh.
+
+## Building the apps
+
+GitHub builds both apps when you push a version tag:
+
+    git tag v1.0
+    git push origin v1.0
+
+The **Build apps** workflow (`.github/workflows/build-apps.yml`) runs the offline tests,
+builds each app with `packaging/build.py`, checks it starts and can reach the internet,
+and attaches both zips to a GitHub Release. You can also start it by hand from the Actions
+tab; the zips then appear as downloads on that run.
+
+To build the Windows app on your own PC:
+
+    python -m pip install pyinstaller
+    python packaging/build.py --online
+
+The result is `release/MoveRouteWeather-windows-x64.zip`. A Mac build has to run on a Mac.
 
 ## Changing the plan
 

@@ -13,3 +13,8 @@ Thumbs.db
 # Schedule edits made in the app
 trip.local.json
 trip.local.json.tmp
+
+# Built apps (packaging/build.py)
+build/
+dist/
+release/

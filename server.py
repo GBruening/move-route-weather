@@ -24,6 +24,7 @@ import json
 import math
 import os
 import re
+import ssl
 import sys
 import threading
 import time
@@ -36,8 +37,48 @@ from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(HERE, "static")
-CACHE_DIR = os.path.join(HERE, "cache")
+# Packaged as a single app (PyInstaller, see packaging/): the bundled files (static/,
+# trip.json, config.json) unpack into a temporary folder, while your own files
+# (config.local.json, trip.local.json, cache/) live next to the app. Run as a script,
+# both are this folder.
+FROZEN = bool(getattr(sys, "frozen", False))
+RES_DIR = getattr(sys, "_MEIPASS", HERE) if FROZEN else HERE
+
+
+def _data_dir():
+    if not FROZEN:
+        return HERE
+    d = os.path.dirname(os.path.abspath(sys.executable))
+    if ".app" + os.sep + "Contents" + os.sep + "MacOS" in d:  # inside a Mac .app: use the folder holding it
+        d = d.split(".app" + os.sep + "Contents")[0].rsplit(os.sep, 1)[0]
+    try:  # next to the app, if that folder can be written to
+        probe = os.path.join(d, ".move-route-weather-write-test")
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+        return d
+    except OSError:
+        pass
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support")
+    elif os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    d = os.path.join(base, "Move Route Weather")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+DATA_DIR = _data_dir()
+STATIC_DIR = os.path.join(RES_DIR, "static")
+CACHE_DIR = os.path.join(DATA_DIR, "cache")
+
+
+def app_file(name):
+    """A shared file (trip.json, config.json): your copy next to the app wins over the bundled one."""
+    mine = os.path.join(DATA_DIR, name)
+    return mine if os.path.exists(mine) else os.path.join(RES_DIR, name)
 
 DEFAULT_CONFIG = {
     "google_maps_api_key": "",
@@ -70,8 +111,7 @@ def _load_json(path):
 def load_config():
     """config.json holds shared settings; config.local.json (git-ignored) overrides it, e.g. for the API key."""
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
-    for name in ("config.json", "config.local.json"):
-        path = os.path.join(HERE, name)
+    for path in (app_file("config.json"), os.path.join(DATA_DIR, "config.local.json")):
         if not os.path.exists(path):
             continue
         for k, v in _load_json(path).items():
@@ -87,7 +127,7 @@ def load_config():
 
 
 CONFIG = load_config()
-TRIP = _load_json(os.path.join(HERE, "trip.json"))
+TRIP = _load_json(app_file("trip.json"))
 PLACES = TRIP["places"]
 DAYS = TRIP["days"]
 ROUTES = OrderedDict((r["id"], r) for r in TRIP["routes"])
@@ -456,6 +496,24 @@ def user_agent():
     return "MoveRouteWeather/1.0 (personal trip planner%s)" % ("; " + contact if contact else "")
 
 
+def _ssl_context():
+    """HTTPS certificates. A packaged Mac or Linux app can't see the certificate file its
+    Python was built with, so fall back to the operating system's own bundle."""
+    ctx = ssl.create_default_context()
+    if not ctx.cert_store_stats().get("x509_ca"):
+        for path in ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt"):
+            if os.path.exists(path):
+                try:
+                    ctx.load_verify_locations(cafile=path)
+                    break
+                except (OSError, ssl.SSLError):
+                    pass
+    return ctx
+
+
+SSL_CONTEXT = _ssl_context()
+
+
 def http_request(url, method="GET", headers=None, body=None, timeout=45):
     """Return (parsed_json, response_headers). Raises FetchError."""
     h = {"User-Agent": user_agent(), "Accept-Encoding": "gzip", "Accept": "application/json"}
@@ -467,7 +525,7 @@ def http_request(url, method="GET", headers=None, body=None, timeout=45):
     host = urllib.parse.urlparse(url).netloc
     req = urllib.request.Request(url, data=data, headers=h, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as resp:
             raw = resp.read()
             if "gzip" in (resp.headers.get("Content-Encoding") or ""):
                 raw = gzip.decompress(raw)
@@ -976,7 +1034,7 @@ def route_days(route_id, portland):
 # variant in trip.local.json (git-ignored); variants without edits come from trip.json.
 # --------------------------------------------------------------------------
 
-TRIP_LOCAL_PATH = os.path.join(HERE, "trip.local.json")
+TRIP_LOCAL_PATH = os.path.join(DATA_DIR, "trip.local.json")
 LOCAL_LOCK = threading.Lock()
 
 
@@ -2125,15 +2183,36 @@ def make_server(host=None, port=None):
     return ThreadingHTTPServer((host or CONFIG["host"], int(port or CONFIG["port"])), Handler)
 
 
+def _wait_before_closing():
+    """A packaged app runs in its own window, which would close before an error can be read."""
+    if FROZEN:
+        try:
+            input("\nPress Enter to close this window.")
+        except (EOFError, KeyboardInterrupt):
+            pass
+
+
 def main():
     port = CONFIG["port"]
     for i, a in enumerate(sys.argv):
         if a == "--port" and i + 1 < len(sys.argv):
             port = int(sys.argv[i + 1])
-    srv = make_server(port=port)
+    try:
+        srv = make_server(port=port)
+    except OSError as e:
+        print("\n  Couldn't start on port %d (%s).\n  Is Move Route Weather already running? If so, use the window "
+              "that's already open, or set a different \"port\" in config.local.json." % (port, e))
+        _wait_before_closing()
+        sys.exit(1)
     url = "http://localhost:%d" % port
-    print("\n  Move Route Weather is running at %s  (Ctrl+C to stop)\n" % url)
-    print("  Google key: %s" % ("set" if google_key() else "not set (map shows Google's development watermark)"))
+    print("\n  Move Route Weather is running at %s  (Ctrl+C or close this window to stop)\n" % url)
+    if google_key():
+        print("  Google key: set")
+    else:
+        print("  Google key: not set, so the map shows Google's development watermark. To add yours, put\n"
+              "  config.local.json with \"google_maps_api_key\" in %s and restart." % DATA_DIR)
+    if FROZEN:
+        print("  Your files (config.local.json, trip.local.json, cache): %s" % DATA_DIR)
     print("  Weather sources: %s" % ", ".join(SOURCE_LABELS[s] for s in SOURCE_LABELS if source_enabled(s)))
     if google_key():
         snap = METER.snapshot()
@@ -2154,4 +2233,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        traceback.print_exc()
+        _wait_before_closing()
+        sys.exit(1)

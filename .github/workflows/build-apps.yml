@@ -1,0 +1,67 @@
+name: Build apps
+
+# Builds the double-click apps with packaging/build.py: MoveRouteWeather.exe on Windows and
+# the MoveRouteWeather app on macOS (Apple Silicon). Each build runs the offline tests,
+# builds, checks the built app starts and can reach the internet, and zips it.
+#
+#   Release:  git tag v1.0 && git push origin v1.0   -> both zips attached to a GitHub Release
+#   Try it:   Actions tab > Build apps > Run workflow  -> zips kept as run artifacts
+#
+# Not run on every push: macOS build minutes count 10x on private repositories.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Offline tests
+        run: |
+          python tests/run_simulated.py
+          python tests/run_simulated.py --no-key
+
+      - name: Install PyInstaller (build tool only; the app itself needs no packages)
+        run: python -m pip install pyinstaller==6.22.3
+
+      - name: Build, check and zip
+        run: python packaging/build.py --online
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoveRouteWeather-${{ runner.os }}
+          path: release/*.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}" release/*.zip
+          --repo "${{ github.repository }}"
+          --title "Move Route Weather ${{ github.ref_name }}"
+          --notes "Download the zip for your computer, unzip it and follow How to run.txt. Add your own Google key in config.local.json next to the app (optional)."
